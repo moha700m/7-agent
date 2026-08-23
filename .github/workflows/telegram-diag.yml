@@ -1,0 +1,27 @@
+name: Telegram External Diagnostic
+on:
+  push:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch diagnostic
+        shell: bash
+        run: |
+          set +e
+          BODY=$(curl --silent --show-error --location --max-time 20 --write-out '\nHTTP_STATUS=%{http_code}\n' 'https://english-level-3-teacher-okjkpp.v2.appdeploy.ai/api/telegram/diag' 2>&1)
+          CODE=$?
+          printf 'CURL_EXIT=%s\n%s\n' "$CODE" "$BODY" > telegram-diag-result.txt
+      - name: Commit diagnostic result
+        shell: bash
+        run: |
+          git config user.name 'telegram-diag-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add telegram-diag-result.txt
+          git diff --cached --quiet || git commit -m 'test: save Telegram diagnostic result'
+          git push
