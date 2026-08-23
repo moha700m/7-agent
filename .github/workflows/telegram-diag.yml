@@ -37,3 +37,4 @@ jobs:
           git add telegram-diag-result.txt
           git diff --cached --quiet || git commit -m 'test: save Telegram E2E audit result'
           git push
+# audit rerun 2026-08-23T10:41+03:00
