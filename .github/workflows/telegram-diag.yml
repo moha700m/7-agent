@@ -14,7 +14,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          BODY=$(curl --silent --show-error --location --max-time 20 --write-out '\nHTTP_STATUS=%{http_code}\n' 'https://english-level-3-teacher-okjkpp.v2.appdeploy.ai/api/telegram/diag' 2>&1)
+          BODY=$(curl --silent --show-error --location --max-time 20 --write-out '\nHTTP_STATUS=%{http_code}\n' 'https://api-v2.appdeploy.ai/app/english-level-3-teacher-okjkpp/api/telegram/diag' 2>&1)
           CODE=$?
           printf 'CURL_EXIT=%s\n%s\n' "$CODE" "$BODY" > telegram-diag-result.txt
       - name: Commit diagnostic result
