@@ -1,3 +1,15 @@
-CURL_EXIT=0
-{"username":"Molamabot","registered":true,"hasWebhook":true,"pending":1,"lastError":"Wrong response from the webhook: 403 Forbidden","lastErrorDate":1787470300}
+=== ENSURE WEBHOOK ===
+{"username":"Molamabot","registered":true,"pending":2,"lastError":null}
+HTTP_STATUS=200
+=== DIAG AFTER DELIVERY ===
+{"username":"Molamabot","registered":true,"hasWebhook":true,"pending":1,"lastError":null,"lastErrorDate":null,"lastUpdateAt":"2026-08-23T07:37:48.280Z","lastProcessedAt":"2026-08-23T07:37:47.959Z","lastReplyType":"text","lastProcessError":null}
+HTTP_STATUS=200
+=== OPENROUTER AUDIT ===
+{"error":"OpenRouter audit failed: This operation was aborted"}
+HTTP_STATUS=500
+=== ELEVENLABS + TELEGRAM VOICE AUDIT ===
+{"ok":true,"sent":true}
+HTTP_STATUS=200
+=== FINAL DIAG ===
+{"username":"Molamabot","registered":true,"hasWebhook":true,"pending":0,"lastError":null,"lastErrorDate":null,"lastUpdateAt":"2026-08-23T07:37:48.280Z","lastProcessedAt":"2026-08-23T07:38:02.418Z","lastReplyType":"text","lastProcessError":null}
 HTTP_STATUS=200
