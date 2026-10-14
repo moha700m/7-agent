@@ -34,6 +34,7 @@ EVENTS = deque(maxlen=600)
 EVENT_ID = 0
 INCOMING = queue.PriorityQueue(maxsize=1000)
 SEQ = itertools.count()
+RECENT_INCOMING = {}
 
 STATE = {
     "running": False,
@@ -401,10 +402,32 @@ def event_priority(etype):
 
 
 def enqueue_event(event):
+    etype = event.get("type")
+    name = (event.get("name") or "").strip().lower()
+    text = re.sub(r"\\s+", " ", (event.get("text") or "").strip().lower())
+    now = time.time()
+
+    # TikTok can occasionally replay the same join/comment event during connection.
+    # Keep it visible in the event log, but don't speak the duplicate twice.
+    if etype in ("comment", "join"):
+        key = (etype, name, text if etype == "comment" else "")
+        window = 10.0 if etype == "comment" else 90.0
+        with STATE_LOCK:
+            last = RECENT_INCOMING.get(key, 0.0)
+            RECENT_INCOMING[key] = now
+            cutoff = now - 180.0
+            for old_key, old_ts in list(RECENT_INCOMING.items()):
+                if old_ts < cutoff:
+                    RECENT_INCOMING.pop(old_key, None)
+        if now - last < window:
+            return False
+
     try:
-        INCOMING.put_nowait((event_priority(event.get("type")), next(SEQ), event))
+        INCOMING.put_nowait((event_priority(etype), next(SEQ), event))
+        return True
     except queue.Full:
         push_event("status", "تم تجاهل حدث بسبب امتلاء طابور الردود")
+        return False
 
 
 def should_reply(event):
@@ -710,6 +733,7 @@ def api_start():
         STATE["last_join_reply"] = 0.0
         STATE["last_spoken_at"] = 0.0
         STATE["like_bucket"] = 0
+        RECENT_INCOMING.clear()
 
     while True:
         try:
