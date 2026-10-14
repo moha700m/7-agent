@@ -635,11 +635,20 @@ def api_test():
     except Exception as exc:
         result["openrouter"] = {"ok": False, "message": redact_error(exc)}
 
-    try:
-        ok, msg = test_vibi(cfg["vibi_key"])
-        result["vibi"] = {"ok": ok, "message": msg}
-    except Exception as exc:
-        result["vibi"] = {"ok": False, "message": redact_error(exc)}
+    result["tts"] = {
+        "ok": bool(cfg.get("voice_id")),
+        "message": "ElevenLabs v4 Turbo عبر OpenRouter" if cfg.get("voice_id") else "Voice ID ناقص",
+        "model": cfg.get("tts_model", "elevenlabs/eleven-v4-turbo"),
+    }
+
+    if cfg.get("vibi_key"):
+        try:
+            ok, msg = test_vibi(cfg["vibi_key"])
+            result["vibi"] = {"ok": ok, "message": msg}
+        except Exception as exc:
+            result["vibi"] = {"ok": False, "message": redact_error(exc)}
+    else:
+        result["vibi"] = {"ok": True, "message": "Vibi احتياطي فقط"}
 
     try:
         live = tiktok_live_check(username)
@@ -650,7 +659,7 @@ def api_test():
     except Exception as exc:
         result["tiktok"] = {"ok": False, "message": redact_error(exc)}
 
-    result["ok"] = all(x.get("ok") for x in [result["openrouter"], result["vibi"], result["tiktok"]])
+    result["ok"] = all(x.get("ok") for x in [result["openrouter"], result["tts"], result["tiktok"]])
     return jsonify(result)
 
 
