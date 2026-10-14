@@ -6,33 +6,76 @@
 <title>Cyber LIVE Audio Player</title>
 <style>
 html,body{margin:0;width:100%;height:100%;background:transparent!important;overflow:hidden}
-#status{position:fixed;left:8px;bottom:8px;font:12px system-ui;color:rgba(255,255,255,.08);user-select:none}
+#status{position:fixed;left:8px;bottom:8px;font:12px system-ui;color:rgba(255,255,255,.06);user-select:none}
+audio{width:1px;height:1px;opacity:.001;position:fixed;left:-10px;top:-10px}
 </style>
 </head>
 <body>
-<div id="status">Cyber Audio</div>
+<audio id="audio" autoplay playsinline preload="auto"></audio>
+<div id="status">Cyber Audio v2</div>
 <script>
 let lastId=0;
 let initialized=false;
-const q=[];
+const queue=[];
 let busy=false;
+const audio=document.getElementById("audio");
+const status=document.getElementById("status");
 
 async function api(path, extra=""){
-  const r=await fetch("/api/backend?path="+encodeURIComponent(path)+(extra||""),{cache:"no-store"});
+  const r=await fetch("/api/backend?path="+encodeURIComponent(path)+(extra||""),{
+    cache:"no-store",
+    headers:{"cache-control":"no-cache"}
+  });
   if(!r.ok) throw new Error("HTTP "+r.status);
   return r.json();
 }
-function enqueue(src){q.push(src);playNext()}
-async function playNext(){
-  if(busy||!q.length)return;
-  busy=true;
-  const a=new Audio(q.shift());
-  a.volume=1;
-  const done=()=>{busy=false;playNext()};
-  a.onended=done;
-  a.onerror=done;
-  try{await a.play()}catch{busy=false}
+
+function b64ToBlobUrl(b64,mime){
+  const bin=atob(b64);
+  const bytes=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
+  return URL.createObjectURL(new Blob([bytes],{type:mime||"audio/mpeg"}));
 }
+
+function enqueue(b64,mime){
+  queue.push({b64,mime});
+  playNext();
+}
+
+async function tryPlay(url, attempt=0){
+  audio.src=url;
+  audio.muted=false;
+  audio.volume=1;
+  audio.load();
+  try{
+    await audio.play();
+    status.textContent="Cyber Audio • playing";
+  }catch(e){
+    if(attempt<12){
+      setTimeout(()=>tryPlay(url,attempt+1),500);
+    }else{
+      status.textContent="Cyber Audio • autoplay blocked";
+      finish(url);
+    }
+  }
+}
+
+function finish(url){
+  try{URL.revokeObjectURL(url)}catch{}
+  busy=false;
+  playNext();
+}
+
+function playNext(){
+  if(busy||!queue.length)return;
+  busy=true;
+  const item=queue.shift();
+  const url=b64ToBlobUrl(item.b64,item.mime);
+  audio.onended=()=>finish(url);
+  audio.onerror=()=>finish(url);
+  tryPlay(url,0);
+}
+
 async function poll(){
   try{
     const j=await api("events","&since="+lastId);
@@ -40,18 +83,19 @@ async function poll(){
     if(!initialized){
       for(const e of rows) lastId=Math.max(lastId,e.id||0);
       initialized=true;
+      status.textContent="Cyber Audio • ready";
       return;
     }
     for(const e of rows){
       lastId=Math.max(lastId,e.id||0);
-      if(e.audio_b64){
-        enqueue("data:"+(e.mime||"audio/mpeg")+";base64,"+e.audio_b64);
-      }
+      if(e.audio_b64)enqueue(e.audio_b64,e.mime);
     }
-  }catch{}
+  }catch(e){
+    status.textContent="Cyber Audio • reconnecting";
+  }
 }
 poll();
-setInterval(poll,700);
+setInterval(poll,650);
 </script>
 </body>
 </html>
