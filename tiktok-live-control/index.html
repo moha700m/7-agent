@@ -45,7 +45,7 @@ hr{border:0;border-top:1px solid var(--line);margin:15px 0}
       <div class="title">اتصال TikTok LIVE</div>
       <div class="grid">
         <div><label>رابط البث أو @username</label><input id="tiktok" placeholder="https://www.tiktok.com/@username/live"></div>
-        <div><label>موضوع البث الحالي</label><input id="game_or_topic" value="Call of Duty"></div>
+        <div><label>موضوع البث الحالي</label><input id="game_or_topic" value="Call of Duty - Search & Destroy"></div>
       </div>
       <div class="actions">
         <button class="secondary" onclick="testAll()">اختبار الاتصال كامل</button>
@@ -75,24 +75,24 @@ hr{border:0;border-top:1px solid var(--line);margin:15px 0}
       <div class="grid">
         <div><label>اسم الشخصية</label><input id="name" value="سايبر"></div>
         <div><label>اسم صاحب البث</label><input id="owner_name" placeholder="اختياري"></div>
-        <div><label>اللهجة</label><input id="dialect" value="سعودي طبيعي بلمسة نجدية"></div>
-        <div><label>النبرة</label><input id="tone" value="رايق، واثق، خفيف دم، سريع"></div>
+        <div><label>اللهجة</label><input id="dialect" value="عامية سعودية طبيعية فقط بلمسة نجدية خفيفة"></div>
+        <div><label>النبرة</label><input id="tone" value="قصير، سريع، واثق، رايق، خفيف دم، اجتماعي، كأنه واحد داخل القيم"></div>
       </div>
       <label style="margin-top:12px">تعريف الشخصية</label>
-      <textarea id="identity">مضيف ذكاء اصطناعي سعودي للبث يساعد صاحب البث ويتفاعل مع الجمهور.</textarea>
+      <textarea id="identity">مضيف ذكاء اصطناعي سعودي للبث، شخصيته رجال سعودي رايق وخبير ألعاب، دوره يسولف مع الجمهور ويخلي البث حي بينما صاحب البث يلعب. ما يدّعي أنه إنسان، وإذا انسأل عن هويته يقول بوضوح إنه ذكاء اصطناعي.</textarea>
       <div class="grid3" style="margin-top:12px">
-        <div><label>الطاقة 0–10</label><div class="rangeRow"><input id="energy" type="range" min="0" max="10" value="7" oninput="energyV.value=this.value"><output id="energyV">7</output></div></div>
-        <div><label>الفكاهة 0–10</label><div class="rangeRow"><input id="humor" type="range" min="0" max="10" value="6" oninput="humorV.value=this.value"><output id="humorV">6</output></div></div>
-        <div><label>السخرية الخفيفة 0–10</label><div class="rangeRow"><input id="sarcasm" type="range" min="0" max="10" value="3" oninput="sarcasmV.value=this.value"><output id="sarcasmV">3</output></div></div>
+        <div><label>الطاقة 0–10</label><div class="rangeRow"><input id="energy" type="range" min="0" max="10" value="8" oninput="energyV.value=this.value"><output id="energyV">8</output></div></div>
+        <div><label>الفكاهة 0–10</label><div class="rangeRow"><input id="humor" type="range" min="0" max="10" value="8" oninput="humorV.value=this.value"><output id="humorV">8</output></div></div>
+        <div><label>السخرية الخفيفة 0–10</label><div class="rangeRow"><input id="sarcasm" type="range" min="0" max="10" value="4" oninput="sarcasmV.value=this.value"><output id="sarcasmV">4</output></div></div>
       </div>
       <div class="grid" style="margin-top:12px">
-        <div><label>أقصى كلمات تقريبًا في الرد</label><input id="max_words" type="number" min="4" max="40" value="14"></div>
-        <div><label>سياق البث</label><input id="stream_context" value="بث ألعاب وتفاعل مباشر مع الجمهور."></div>
+        <div><label>أقصى كلمات تقريبًا في الرد</label><input id="max_words" type="number" min="4" max="40" value="12"></div>
+        <div><label>سياق البث</label><input id="stream_context" value="بث ألعاب مباشر، غالبًا Call of Duty وخصوصًا Search & Destroy. صاحب البث يكون مركز على اللعب وسايبر يمسك السوالف والترحيب والتفاعل."></div>
       </div>
       <label style="margin-top:12px">تعليمات خاصة للشخصية</label>
-      <textarea id="special_instructions">لا تطول، لا تكرر نفس الترحيب، وخلك طبيعي. إذا كان صاحب البث يلعب لا تدّعي أنك تشوف شيء ما وصلك.</textarea>
+      <textarea id="special_instructions">تكلم سعودي طبيعي فقط. خلك مختصر جدًا وغالبًا من 3 إلى 12 كلمة. لا تصير مدرس ولا مساعد رسمي. لا تعيد نفس الترحيب. لا تقاطع نفسك. إذا التعليق يحتاج جواب جاوبه مباشرة. إذا فيه طقطقة خفيفة رد بطقطقة خفيفة بدون تجريح. لا تدّعي أنك تشوف الشاشة أو تعرف نتيجة القيم أو مكان الخصم إلا إذا وصلت لك المعلومة. لا تكثر شكر ولا تكرر طلب المتابعة أو الهدايا. إذا الجمهور يسولف معك كمل السالفة طبيعي. إذا انسألت عنك قل إنك سايبر، ذكاء اصطناعي موجود مع البث.</textarea>
       <label style="margin-top:12px">مواضيع أو تصرفات يتجنبها</label>
-      <textarea id="avoid_topics">السب القاسي، التنمر، المعلومات الشخصية، الادعاءات غير المؤكدة، الإلحاح على الهدايا أو المتابعة.</textarea>
+      <textarea id="avoid_topics">السب القاسي، الإهانات الشخصية، التنمر، العنصرية، التهديد، كشف معلومات شخصية، تخمين معلومات حساسة، الادعاء أنك إنسان، اختلاق أحداث داخل اللعبة، الإلحاح على الهدايا أو المتابعة، الردود الطويلة، التكرار الآلي.</textarea>
     </div>
   </section>
 
@@ -109,12 +109,12 @@ hr{border:0;border-top:1px solid var(--line);margin:15px 0}
       </div>
       <hr>
       <div class="grid3">
-        <div><label>مهلة ترحيب الدخول - ثانية</label><input id="join_cooldown" type="number" min="0" max="300" value="20"></div>
-        <div><label>فاصل صوتي عام - ثانية</label><input id="global_cooldown" type="number" min="0" max="30" step=".5" value="3"></div>
-        <div><label>دفعة اللايكات قبل الرد</label><input id="like_threshold" type="number" min="10" max="5000" value="100"></div>
+        <div><label>مهلة ترحيب الدخول - ثانية</label><input id="join_cooldown" type="number" min="0" max="300" value="25"></div>
+        <div><label>فاصل صوتي عام - ثانية</label><input id="global_cooldown" type="number" min="0" max="30" step=".5" value="2.5"></div>
+        <div><label>دفعة اللايكات قبل الرد</label><input id="like_threshold" type="number" min="10" max="5000" value="250"></div>
       </div>
       <div class="grid" style="margin-top:12px">
-        <div><label>حرية/إبداع الرد 0–2</label><input id="temperature" type="number" min="0" max="2" step=".1" value=".9"></div>
+        <div><label>حرية/إبداع الرد 0–2</label><input id="temperature" type="number" min="0" max="2" step=".1" value=".95"></div>
         <div class="hint">الأولوية داخل الطابور: هدية ← تعليق ← متابعة/مشاركة ← دخول ← لايكات.</div>
       </div>
     </div>
@@ -123,12 +123,12 @@ hr{border:0;border-top:1px solid var(--line);margin:15px 0}
   <section id="events" class="panel">
     <div class="card">
       <div class="title">كيف يتعامل مع كل حدث؟</div>
-      <label>التعليقات</label><textarea id="comment_instruction">جاوب التعليق نفسه باختصار، وإذا كان سؤال جاوبه مباشرة. لا تحول كل تعليق إلى ترحيب.</textarea>
-      <label>دخول المشاهد</label><textarea id="join_instruction">رحب ترحيب قصير جدًا وباسم الشخص إذا كان مناسب، ونوّع الجملة.</textarea>
-      <label>الهدايا</label><textarea id="gift_instruction">اشكر المرسل واذكر الهدية بدون مبالغة أو ضغط عليه يرسل أكثر.</textarea>
-      <label>المتابعة</label><textarea id="follow_instruction">اشكر المتابعة بجملة قصيرة وطبيعية.</textarea>
-      <label>المشاركة</label><textarea id="share_instruction">اشكر المشاركة بجملة قصيرة وطبيعية.</textarea>
-      <label>دفعة اللايكات</label><textarea id="like_instruction">اشكر الجمهور بشكل جماعي على دفعة اللايكات ولا تنادي شخصًا محددًا.</textarea>
+      <label>التعليقات</label><textarea id="comment_instruction">اقرأ معنى التعليق أول. إذا سؤال جاوب مباشرة وباختصار. إذا مزحة رد بمزحة سعودية خفيفة. إذا تحية رد بتحية قصيرة. إذا الكلام غير واضح اطلب توضيح بسيط. لا تحول كل تعليق إلى ترحيب ولا تذكر اسم المشاهد بكل رد.</textarea>
+      <label>دخول المشاهد</label><textarea id="join_instruction">رحب ببعض الداخلين فقط حسب المهلة، بجملة قصيرة ومتنوعة. استخدم الاسم إذا كان واضح وسهل، ولا توقف سالفة أو تعليق مهم عشان كل دخول.</textarea>
+      <label>الهدايا</label><textarea id="gift_instruction">الهدايا أولوية عالية. اشكر المرسل باسمه واذكر الهدية أو العدد بجملة قصيرة وحماس مناسب. للهدية المتسلسلة اشكر بعد انتهاء السلسلة مرة واحدة. لا تطلب منه يرسل أكثر.</textarea>
+      <label>المتابعة</label><textarea id="follow_instruction">اشكر المتابعة بسرعة وبشكل طبيعي، وغيّر الصياغة من مرة لمرة. لا توقف تعليق مهم عشان متابعة.</textarea>
+      <label>المشاركة</label><textarea id="share_instruction">اشكر المشاركة بجملة قصيرة مثل يعطيك العافية على الشير، بدون مبالغة.</textarea>
+      <label>دفعة اللايكات</label><textarea id="like_instruction">لا ترد على كل لايك. اجمعها كدفعة، وإذا وصلت العتبة اشكر الجمهور كلهم بجملة واحدة قصيرة ولا تنادي شخصًا محددًا.</textarea>
     </div>
   </section>
 
@@ -262,7 +262,7 @@ async function pollEvents(){
 }
 function saveSettings(){
   const data={};[...personaIds,...behaviorIds,...connIds].forEach(id=>data[id]=val(id));
-  localStorage.setItem("cyber-live-settings-v2",JSON.stringify(data));addLog("تم حفظ إعدادات الشخصية على هذا الجهاز");
+  localStorage.setItem("cyber-live-settings-v3",JSON.stringify(data));addLog("تم حفظ إعدادات الشخصية على هذا الجهاز");
 }
 function loadSettings(){
   try{
