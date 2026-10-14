@@ -266,12 +266,12 @@ function saveSettings(){
 }
 function loadSettings(){
   try{
-    const data=JSON.parse(localStorage.getItem("cyber-live-settings-v2")||"{}");
+    const data=JSON.parse(localStorage.getItem("cyber-live-settings-v3")||"{}");
     Object.entries(data).forEach(([id,v])=>{const e=$(id);if(!e)return;if(e.type==="checkbox")e.checked=!!v;else e.value=v});
     ["energy","humor","sarcasm"].forEach(id=>$(id+"V").value=$(id).value);
   }catch{}
 }
-function resetSettings(){localStorage.removeItem("cyber-live-settings-v2");location.reload()}
+function resetSettings(){localStorage.removeItem("cyber-live-settings-v3");location.reload()}
 loadSettings();pollStatus();pollEvents();setInterval(pollStatus,2500);setInterval(pollEvents,1400);
 </script>
 </body>
