@@ -151,6 +151,7 @@ def build_config(data):
         "model": (data.get("model") or "google/gemini-2.5-flash").strip(),
         "vibi_key": (data.get("vibi_key") or os.getenv("VIBI_API_KEY", "")).strip(),
         "voice_id": (data.get("voice_id") or os.getenv("VIBI_VOICE_ID", "rpGHcNQJvO8dFNNFNj1v")).strip(),
+        "tts_voice": (data.get("tts_voice") or "george").strip(),
         "vibi_model": (data.get("vibi_model") or os.getenv("VIBI_MODEL", "eleven_v3")).strip(),
         "tts_model": (data.get("tts_model") or "elevenlabs/eleven-v4-turbo").strip(),
         "tts_provider": (data.get("tts_provider") or "openrouter").strip(),
@@ -298,7 +299,7 @@ def openrouter_reply(event, cfg=None):
 def openrouter_speak(text, cfg=None):
     cfg = cfg or STATE["config"]
     key = cfg.get("openrouter_key", "")
-    voice_id = (cfg.get("voice_id") or "george").strip()
+    voice_id = (cfg.get("tts_voice") or "george").strip()
     model = (cfg.get("tts_model") or "elevenlabs/eleven-v4-turbo").strip()
 
     r = requests.post(
@@ -667,8 +668,8 @@ def api_test():
 def api_preview():
     data = request.get_json(silent=True) or {}
     cfg = build_config(data)
-    if not cfg["openrouter_key"] or not cfg["voice_id"]:
-        return jsonify({"ok": False, "error": "حط OpenRouter Key وVoice ID"}), 400
+    if not cfg["openrouter_key"] or not cfg["tts_voice"]:
+        return jsonify({"ok": False, "error": "حط OpenRouter Key وصوت ElevenLabs"}), 400
     event_type = (data.get("preview_type") or "comment").strip()
     preview_text = (data.get("preview_text") or "السلام عليكم").strip()
     event = {"type": event_type, "name": "مشاهد تجريبي", "text": preview_text}
