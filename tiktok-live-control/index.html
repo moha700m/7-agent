@@ -139,8 +139,10 @@ hr{border:0;border-top:1px solid var(--line);margin:15px 0}
         <div><label>OpenRouter Key</label><input id="openrouter_key" type="password" placeholder="sk-or-v1-..."><div class="secretNote">يبقى داخل جلسة المتصفح ولا يُحفظ ضمن إعدادات الشخصية.</div></div>
         <div><label>الموديل</label><input id="model" value="google/gemini-2.5-flash"></div>
         <div><label>Vibi Key - احتياطي اختياري</label><input id="vibi_key" type="password" placeholder="اختياري"><div class="secretNote">الصوت الأساسي صار ElevenLabs v4 Turbo عبر OpenRouter.</div></div>
-        <div><label>Vibi Voice ID</label><input id="voice_id" value="rpGHcNQJvO8dFNNFNj1v"></div>
-        <div><label>TTS Model</label><input id="tts_model" value="elevenlabs/eleven-v4-turbo" readonly></div><div><label>Vibi Model - احتياطي</label><input id="vibi_model" value="eleven_v3"></div>
+        <div><label>ElevenLabs Voice</label><input id="tts_voice" value="george"></div>
+        <div><label>TTS Model</label><input id="tts_model" value="elevenlabs/eleven-v4-turbo" readonly></div>
+        <div><label>Vibi Voice ID - احتياطي</label><input id="voice_id" value="rpGHcNQJvO8dFNNFNj1v"></div>
+        <div><label>Vibi Model - احتياطي</label><input id="vibi_model" value="eleven_v3"></div>
         <div><label>لغة الصوت</label><input id="voice_language" value="ar"></div>
         <div><label>Stability</label><input id="voice_stability" type="number" min="0" max="1" step=".05" value=".5"></div>
         <div><label>Similarity</label><input id="voice_similarity" type="number" min="0" max="1" step=".05" value=".75"></div>
@@ -185,7 +187,7 @@ document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{
 
 const personaIds=["name","owner_name","dialect","tone","identity","energy","humor","sarcasm","max_words","stream_context","game_or_topic","special_instructions","avoid_topics","comment_instruction","join_instruction","gift_instruction","follow_instruction","share_instruction","like_instruction"];
 const behaviorIds=["respond_comments","respond_gifts","respond_follows","respond_shares","respond_joins","respond_likes","join_cooldown","global_cooldown","like_threshold","temperature"];
-const connIds=["tiktok","model","voice_id","tts_model","vibi_model","voice_language","voice_stability","voice_similarity","voice_speed"];
+const connIds=["tiktok","model","tts_voice","voice_id","tts_model","vibi_model","voice_language","voice_stability","voice_similarity","voice_speed"];
 
 function val(id){const e=$(id); return e.type==="checkbox"?e.checked:e.value}
 function num(id){return Number($(id).value)}
@@ -196,6 +198,7 @@ function payload(){
     openrouter_key:val("openrouter_key"),
     vibi_key:val("vibi_key"),
     voice_id:val("voice_id"),
+    tts_voice:val("tts_voice"),
     tts_model:val("tts_model"),
     tts_provider:"openrouter",
     vibi_model:val("vibi_model"),
