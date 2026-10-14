@@ -152,6 +152,8 @@ def build_config(data):
         "vibi_key": (data.get("vibi_key") or os.getenv("VIBI_API_KEY", "")).strip(),
         "voice_id": (data.get("voice_id") or os.getenv("VIBI_VOICE_ID", "rpGHcNQJvO8dFNNFNj1v")).strip(),
         "vibi_model": (data.get("vibi_model") or os.getenv("VIBI_MODEL", "eleven_v3")).strip(),
+        "tts_model": (data.get("tts_model") or "elevenlabs/eleven-v4-turbo").strip(),
+        "tts_provider": (data.get("tts_provider") or "openrouter").strip(),
         "voice_language": (data.get("voice_language") or "ar").strip(),
         "voice_stability": clamp_num(data.get("voice_stability"), 0, 1, 0.5),
         "voice_similarity": clamp_num(data.get("voice_similarity"), 0, 1, 0.75),
@@ -293,6 +295,35 @@ def openrouter_reply(event, cfg=None):
     return answer[:450]
 
 
+def openrouter_speak(text, cfg=None):
+    cfg = cfg or STATE["config"]
+    key = cfg.get("openrouter_key", "")
+    voice_id = (cfg.get("voice_id") or "george").strip()
+    model = (cfg.get("tts_model") or "elevenlabs/eleven-v4-turbo").strip()
+
+    r = requests.post(
+        f"{OPENROUTER_BASE}/audio/speech",
+        headers={
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": os.getenv("RENDER_EXTERNAL_URL", "https://render.com"),
+            "X-Title": "TikTok AI Live",
+        },
+        json={
+            "model": model,
+            "input": text,
+            "voice": voice_id,
+            "response_format": "mp3",
+            "provider": {"options": {"elevenlabs": {"language_code": "ar"}}},
+        },
+        timeout=35,
+    )
+    if r.status_code != 200 or not r.content:
+        raise RuntimeError(f"OpenRouter TTS HTTP {r.status_code}")
+    mime = r.headers.get("content-type", "audio/mpeg")
+    return base64.b64encode(r.content).decode("ascii"), mime
+
+
 def vibi_speak(text, cfg=None):
     cfg = cfg or STATE["config"]
     key = cfg.get("vibi_key", "")
@@ -425,7 +456,10 @@ def responder_loop():
                 time.sleep(wait_for)
 
             reply = openrouter_reply(event, cfg)
-            audio_b64, mime = vibi_speak(reply, cfg)
+            if cfg.get("tts_provider") == "openrouter":
+                audio_b64, mime = openrouter_speak(reply, cfg)
+            else:
+                audio_b64, mime = vibi_speak(reply, cfg)
             with STATE_LOCK:
                 STATE["last_spoken_at"] = time.time()
             push_event("ai", reply, name=event.get("name", ""), audio_b64=audio_b64, mime=mime)
@@ -624,14 +658,17 @@ def api_test():
 def api_preview():
     data = request.get_json(silent=True) or {}
     cfg = build_config(data)
-    if not cfg["openrouter_key"] or not cfg["vibi_key"] or not cfg["voice_id"]:
-        return jsonify({"ok": False, "error": "حط OpenRouter Key وVibi Key وVoice ID"}), 400
+    if not cfg["openrouter_key"] or not cfg["voice_id"]:
+        return jsonify({"ok": False, "error": "حط OpenRouter Key وVoice ID"}), 400
     event_type = (data.get("preview_type") or "comment").strip()
     preview_text = (data.get("preview_text") or "السلام عليكم").strip()
     event = {"type": event_type, "name": "مشاهد تجريبي", "text": preview_text}
     try:
         reply = openrouter_reply(event, cfg)
-        audio_b64, mime = vibi_speak(reply, cfg)
+        if cfg.get("tts_provider") == "openrouter":
+            audio_b64, mime = openrouter_speak(reply, cfg)
+        else:
+            audio_b64, mime = vibi_speak(reply, cfg)
         return jsonify({"ok": True, "reply": reply, "audio_b64": audio_b64, "mime": mime})
     except Exception as exc:
         return jsonify({"ok": False, "error": redact_error(exc)}), 502
