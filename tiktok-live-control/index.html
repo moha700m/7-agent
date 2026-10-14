@@ -139,8 +139,12 @@ hr{border:0;border-top:1px solid var(--line);margin:15px 0}
         <div><label>OpenRouter Key</label><input id="openrouter_key" type="password" placeholder="sk-or-v1-..."><div class="secretNote">يبقى داخل جلسة المتصفح ولا يُحفظ ضمن إعدادات الشخصية.</div></div>
         <div><label>الموديل</label><input id="model" value="google/gemini-2.5-flash"></div>
         <div><label>Vibi Key</label><input id="vibi_key" type="password" placeholder="sk_..."><div class="secretNote">لا يتم وضعه داخل GitHub أو واجهة الموقع.</div></div>
-        <div><label>Vibi Voice ID</label><input id="voice_id" placeholder="Voice ID"></div>
+        <div><label>Vibi Voice ID</label><input id="voice_id" value="rpGHcNQJvO8dFNNFNj1v"></div>
         <div><label>Vibi Model</label><input id="vibi_model" value="eleven_v3"></div>
+        <div><label>لغة الصوت</label><input id="voice_language" value="ar"></div>
+        <div><label>Stability</label><input id="voice_stability" type="number" min="0" max="1" step=".05" value=".5"></div>
+        <div><label>Similarity</label><input id="voice_similarity" type="number" min="0" max="1" step=".05" value=".75"></div>
+        <div><label>Speed</label><input id="voice_speed" type="number" min=".7" max="1.3" step=".05" value="1"></div>
       </div>
       <hr>
       <div class="title">اختبار الشخصية والصوت قبل البث</div>
@@ -181,7 +185,7 @@ document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{
 
 const personaIds=["name","owner_name","dialect","tone","identity","energy","humor","sarcasm","max_words","stream_context","game_or_topic","special_instructions","avoid_topics","comment_instruction","join_instruction","gift_instruction","follow_instruction","share_instruction","like_instruction"];
 const behaviorIds=["respond_comments","respond_gifts","respond_follows","respond_shares","respond_joins","respond_likes","join_cooldown","global_cooldown","like_threshold","temperature"];
-const connIds=["tiktok","model","voice_id","vibi_model"];
+const connIds=["tiktok","model","voice_id","vibi_model","voice_language","voice_stability","voice_similarity","voice_speed"];
 
 function val(id){const e=$(id); return e.type==="checkbox"?e.checked:e.value}
 function num(id){return Number($(id).value)}
@@ -193,6 +197,10 @@ function payload(){
     vibi_key:val("vibi_key"),
     voice_id:val("voice_id"),
     vibi_model:val("vibi_model"),
+    voice_language:val("voice_language"),
+    voice_stability:num("voice_stability"),
+    voice_similarity:num("voice_similarity"),
+    voice_speed:num("voice_speed"),
     persona:{
       name:val("name"),owner_name:val("owner_name"),dialect:val("dialect"),tone:val("tone"),identity:val("identity"),
       energy:num("energy"),humor:num("humor"),sarcasm:num("sarcasm"),max_words:num("max_words"),
