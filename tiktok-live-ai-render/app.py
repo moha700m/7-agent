@@ -479,7 +479,8 @@ def start_tiktok_client(username):
     def name_of(event):
         user = getattr(event, "user", None)
         nickname = (getattr(user, "nickname", None) or "").strip()
-        return nickname or "مشاهد"
+        username = (getattr(user, "unique_id", None) or "").strip()
+        return nickname or username or "مشاهد"
 
     @client.on(ConnectEvent)
     async def on_connect(event):
