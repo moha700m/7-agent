@@ -149,9 +149,13 @@ def build_config(data):
     return {
         "openrouter_key": (data.get("openrouter_key") or "").strip(),
         "model": (data.get("model") or "google/gemini-2.5-flash").strip(),
-        "vibi_key": (data.get("vibi_key") or "").strip(),
-        "voice_id": (data.get("voice_id") or "").strip(),
-        "vibi_model": (data.get("vibi_model") or "eleven_v3").strip(),
+        "vibi_key": (data.get("vibi_key") or os.getenv("VIBI_API_KEY", "")).strip(),
+        "voice_id": (data.get("voice_id") or os.getenv("VIBI_VOICE_ID", "rpGHcNQJvO8dFNNFNj1v")).strip(),
+        "vibi_model": (data.get("vibi_model") or os.getenv("VIBI_MODEL", "eleven_v3")).strip(),
+        "voice_language": (data.get("voice_language") or "ar").strip(),
+        "voice_stability": clamp_num(data.get("voice_stability"), 0, 1, 0.5),
+        "voice_similarity": clamp_num(data.get("voice_similarity"), 0, 1, 0.75),
+        "voice_speed": clamp_num(data.get("voice_speed"), 0.7, 1.3, 1.0),
         "persona": persona,
         "behavior": behavior,
     }
@@ -304,12 +308,12 @@ def vibi_speak(text, cfg=None):
         json={
             "text": text,
             "model_id": model,
-            "language_code": "ar",
+            "language_code": cfg.get("voice_language", "ar"),
             "provider": "elevenlabs",
             "voice_settings": {
-                "stability": 0.5,
-                "similarity_boost": 0.75,
-                "speed": 1.0,
+                "stability": cfg.get("voice_stability", 0.5),
+                "similarity_boost": cfg.get("voice_similarity", 0.75),
+                "speed": cfg.get("voice_speed", 1.0),
             },
         },
         timeout=25,
