@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>لوحة سايبر للبث</title>
+<style>
+:root{--bg:#090b0f;--card:#12151b;--card2:#0e1116;--line:#262b35;--text:#f5f7fb;--muted:#8f98a8;--ok:#45d483;--bad:#ff6b7a;--warn:#f6c453;--accent:#7c8cff;--gift:#ffd66b}
+*{box-sizing:border-box}body{margin:0;background:linear-gradient(180deg,#090b0f,#0d1016);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Tahoma,Arial,sans-serif}
+.wrap{max-width:1120px;margin:auto;padding:22px}.top{display:flex;gap:14px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:16px}
+h1{font-size:25px;margin:0}.sub{color:var(--muted);font-size:13px;margin-top:5px}.badge{background:#17251d;color:var(--ok);border:1px solid #284d35;padding:8px 12px;border-radius:99px;font-weight:800;font-size:13px}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}.tab{background:#151922;border:1px solid var(--line);color:#cbd2df;padding:9px 13px;border-radius:10px;cursor:pointer}.tab.active{background:#fff;color:#111;border-color:#fff}
+.panel{display:none}.panel.active{display:block}.card{background:rgba(18,21,27,.96);border:1px solid var(--line);border-radius:16px;padding:17px;margin-bottom:13px}.title{font-weight:900;margin-bottom:12px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}@media(max-width:760px){.grid,.grid3{grid-template-columns:1fr}}
+label{display:block;color:#b9c0cc;font-size:12px;margin:0 0 6px}input,textarea,select{width:100%;background:var(--card2);color:#fff;border:1px solid #313744;border-radius:10px;padding:11px;font:inherit;outline:none}textarea{min-height:88px;resize:vertical}input:focus,textarea:focus,select:focus{border-color:#6877e8}
+.rangeRow{display:grid;grid-template-columns:1fr 70px;gap:8px;align-items:center}.toggle{display:flex;align-items:center;gap:9px;background:var(--card2);border:1px solid var(--line);padding:10px;border-radius:10px}.toggle input{width:auto}
+.actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:12px}button{border:0;border-radius:10px;padding:11px 15px;font-weight:900;cursor:pointer;background:#fff;color:#111}.secondary{background:#252b36;color:#fff}.danger{background:#612631;color:#fff}.accent{background:var(--accent);color:#fff}
+.statusGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}@media(max-width:760px){.statusGrid{grid-template-columns:1fr 1fr}}.stat{background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:11px}.stat b{display:block;color:var(--muted);font-size:11px;margin-bottom:4px}.ok{color:var(--ok)}.bad{color:var(--bad)}.warn{color:var(--warn)}
+.hint{font-size:12px;color:var(--muted);line-height:1.7}.research{background:#111827;border:1px solid #273758;border-radius:12px;padding:13px;line-height:1.8;color:#c8d2e5}
+#log{height:360px;overflow:auto;background:#080a0d;border-radius:12px;padding:10px}.row{padding:8px;border-bottom:1px solid #171a20;font-size:14px}.row small{color:#657080;margin-left:7px}.ai{color:#8ef0b0}.gift{color:var(--gift)}.error{color:#ff9aa6}.statusline{color:#98c7ff}
+.secretNote{font-size:11px;color:#87909e;margin-top:5px}.pill{display:inline-block;padding:4px 8px;border-radius:99px;background:#202630;color:#c8d0de;font-size:11px}
+hr{border:0;border-top:1px solid var(--line);margin:15px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div>
+      <h1>لوحة سايبر للبث</h1>
+      <div class="sub">غيّر الشخصية، اللهجة، أسلوب الرد، أولويات الأحداث، الذكاء والصوت من مكان واحد.</div>
+    </div>
+    <div id="liveBadge" class="badge">● غير متصل</div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="connect">الاتصال</button>
+    <button class="tab" data-tab="persona">الشخصية</button>
+    <button class="tab" data-tab="behavior">التصرف بالبث</button>
+    <button class="tab" data-tab="events">الأحداث والجمل</button>
+    <button class="tab" data-tab="providers">الذكاء والصوت</button>
+    <button class="tab" data-tab="live">السجل المباشر</button>
+  </div>
+
+  <section id="connect" class="panel active">
+    <div class="card">
+      <div class="title">اتصال TikTok LIVE</div>
+      <div class="grid">
+        <div><label>رابط البث أو @username</label><input id="tiktok" placeholder="https://www.tiktok.com/@username/live"></div>
+        <div><label>موضوع البث الحالي</label><input id="game_or_topic" value="Call of Duty"></div>
+      </div>
+      <div class="actions">
+        <button class="secondary" onclick="testAll()">اختبار الاتصال كامل</button>
+        <button class="accent" onclick="startAgent()">تشغيل الوكيل</button>
+        <button class="danger" onclick="stopAgent()">إيقاف</button>
+      </div>
+    </div>
+    <div class="card statusGrid">
+      <div class="stat"><b>TikTok</b><span id="stTikTok" class="warn">OFFLINE</span></div>
+      <div class="stat"><b>Room ID</b><span id="stRoom">—</span></div>
+      <div class="stat"><b>OpenRouter</b><span id="stOR">—</span></div>
+      <div class="stat"><b>Vibi</b><span id="stVibi">—</span></div>
+    </div>
+    <div class="card">
+      <div class="title">الإعداد المقترح للبث</div>
+      <div class="research">
+        خلّ الهدايا والتعليقات أعلى أولوية، المتابعة والمشاركة بعدها، والدخول بمهلة حتى ما يصير إزعاج صوتي.
+        الهدية المتسلسلة تُشكر مرة بعد انتهاء السلسلة، واللايكات تتجمع كدفعات بدل الرد على كل لايك.
+        الردود الافتراضية قصيرة وبلهجة محلية، والوكيل ما يكرر طلب المتابعة أو الهدايا بشكل مزعج.
+      </div>
+    </div>
+  </section>
+
+  <section id="persona" class="panel">
+    <div class="card">
+      <div class="title">هوية الشخصية</div>
+      <div class="grid">
+        <div><label>اسم الشخصية</label><input id="name" value="سايبر"></div>
+        <div><label>اسم صاحب البث</label><input id="owner_name" placeholder="اختياري"></div>
+        <div><label>اللهجة</label><input id="dialect" value="سعودي طبيعي بلمسة نجدية"></div>
+        <div><label>النبرة</label><input id="tone" value="رايق، واثق، خفيف دم، سريع"></div>
+      </div>
+      <label style="margin-top:12px">تعريف الشخصية</label>
+      <textarea id="identity">مضيف ذكاء اصطناعي سعودي للبث يساعد صاحب البث ويتفاعل مع الجمهور.</textarea>
+      <div class="grid3" style="margin-top:12px">
+        <div><label>الطاقة 0–10</label><div class="rangeRow"><input id="energy" type="range" min="0" max="10" value="7" oninput="energyV.value=this.value"><output id="energyV">7</output></div></div>
+        <div><label>الفكاهة 0–10</label><div class="rangeRow"><input id="humor" type="range" min="0" max="10" value="6" oninput="humorV.value=this.value"><output id="humorV">6</output></div></div>
+        <div><label>السخرية الخفيفة 0–10</label><div class="rangeRow"><input id="sarcasm" type="range" min="0" max="10" value="3" oninput="sarcasmV.value=this.value"><output id="sarcasmV">3</output></div></div>
+      </div>
+      <div class="grid" style="margin-top:12px">
+        <div><label>أقصى كلمات تقريبًا في الرد</label><input id="max_words" type="number" min="4" max="40" value="14"></div>
+        <div><label>سياق البث</label><input id="stream_context" value="بث ألعاب وتفاعل مباشر مع الجمهور."></div>
+      </div>
+      <label style="margin-top:12px">تعليمات خاصة للشخصية</label>
+      <textarea id="special_instructions">لا تطول، لا تكرر نفس الترحيب، وخلك طبيعي. إذا كان صاحب البث يلعب لا تدّعي أنك تشوف شيء ما وصلك.</textarea>
+      <label style="margin-top:12px">مواضيع أو تصرفات يتجنبها</label>
+      <textarea id="avoid_topics">السب القاسي، التنمر، المعلومات الشخصية، الادعاءات غير المؤكدة، الإلحاح على الهدايا أو المتابعة.</textarea>
+    </div>
+  </section>
+
+  <section id="behavior" class="panel">
+    <div class="card">
+      <div class="title">متى يرد؟</div>
+      <div class="grid3">
+        <label class="toggle"><input id="respond_comments" type="checkbox" checked> التعليقات</label>
+        <label class="toggle"><input id="respond_gifts" type="checkbox" checked> الهدايا</label>
+        <label class="toggle"><input id="respond_follows" type="checkbox" checked> المتابعات</label>
+        <label class="toggle"><input id="respond_shares" type="checkbox" checked> المشاركات</label>
+        <label class="toggle"><input id="respond_joins" type="checkbox" checked> دخول المشاهدين</label>
+        <label class="toggle"><input id="respond_likes" type="checkbox"> دفعات اللايكات</label>
+      </div>
+      <hr>
+      <div class="grid3">
+        <div><label>مهلة ترحيب الدخول - ثانية</label><input id="join_cooldown" type="number" min="0" max="300" value="20"></div>
+        <div><label>فاصل صوتي عام - ثانية</label><input id="global_cooldown" type="number" min="0" max="30" step=".5" value="3"></div>
+        <div><label>دفعة اللايكات قبل الرد</label><input id="like_threshold" type="number" min="10" max="5000" value="100"></div>
+      </div>
+      <div class="grid" style="margin-top:12px">
+        <div><label>حرية/إبداع الرد 0–2</label><input id="temperature" type="number" min="0" max="2" step=".1" value=".9"></div>
+        <div class="hint">الأولوية داخل الطابور: هدية ← تعليق ← متابعة/مشاركة ← دخول ← لايكات.</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="events" class="panel">
+    <div class="card">
+      <div class="title">كيف يتعامل مع كل حدث؟</div>
+      <label>التعليقات</label><textarea id="comment_instruction">جاوب التعليق نفسه باختصار، وإذا كان سؤال جاوبه مباشرة. لا تحول كل تعليق إلى ترحيب.</textarea>
+      <label>دخول المشاهد</label><textarea id="join_instruction">رحب ترحيب قصير جدًا وباسم الشخص إذا كان مناسب، ونوّع الجملة.</textarea>
+      <label>الهدايا</label><textarea id="gift_instruction">اشكر المرسل واذكر الهدية بدون مبالغة أو ضغط عليه يرسل أكثر.</textarea>
+      <label>المتابعة</label><textarea id="follow_instruction">اشكر المتابعة بجملة قصيرة وطبيعية.</textarea>
+      <label>المشاركة</label><textarea id="share_instruction">اشكر المشاركة بجملة قصيرة وطبيعية.</textarea>
+      <label>دفعة اللايكات</label><textarea id="like_instruction">اشكر الجمهور بشكل جماعي على دفعة اللايكات ولا تنادي شخصًا محددًا.</textarea>
+    </div>
+  </section>
+
+  <section id="providers" class="panel">
+    <div class="card">
+      <div class="title">OpenRouter + Vibi</div>
+      <div class="grid">
+        <div><label>OpenRouter Key</label><input id="openrouter_key" type="password" placeholder="sk-or-v1-..."><div class="secretNote">يبقى داخل جلسة المتصفح ولا يُحفظ ضمن إعدادات الشخصية.</div></div>
+        <div><label>الموديل</label><input id="model" value="google/gemini-2.5-flash"></div>
+        <div><label>Vibi Key</label><input id="vibi_key" type="password" placeholder="sk_..."><div class="secretNote">لا يتم وضعه داخل GitHub أو واجهة الموقع.</div></div>
+        <div><label>Vibi Voice ID</label><input id="voice_id" placeholder="Voice ID"></div>
+        <div><label>Vibi Model</label><input id="vibi_model" value="eleven_v3"></div>
+      </div>
+      <hr>
+      <div class="title">اختبار الشخصية والصوت قبل البث</div>
+      <div class="grid">
+        <div><label>نوع الحدث التجريبي</label><select id="preview_type"><option value="comment">تعليق</option><option value="join">دخول</option><option value="gift">هدية</option><option value="follow">متابعة</option><option value="share">مشاركة</option></select></div>
+        <div><label>النص التجريبي</label><input id="preview_text" value="السلام عليكم وش تلعب؟"></div>
+      </div>
+      <div class="actions"><button class="secondary" onclick="previewVoice()">جرّب الرد والصوت</button></div>
+      <div id="previewReply" class="hint"></div>
+    </div>
+  </section>
+
+  <section id="live" class="panel">
+    <div class="card">
+      <div class="title">السجل المباشر</div>
+      <div id="log"></div>
+    </div>
+  </section>
+
+  <div class="card">
+    <div class="actions">
+      <button class="secondary" onclick="saveSettings()">حفظ إعدادات الشخصية على هذا الجهاز</button>
+      <button class="secondary" onclick="resetSettings()">رجوع للإعدادات المقترحة</button>
+    </div>
+    <div class="hint">الحفظ المحلي يشمل إعدادات الشخصية والسلوك فقط. مفاتيح OpenRouter وVibi لا تُحفظ في Local Storage.</div>
+  </div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+let lastId=0, audioQueue=[], playing=false;
+
+document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{
+  document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
+  document.querySelectorAll(".panel").forEach(x=>x.classList.remove("active"));
+  b.classList.add("active"); $(b.dataset.tab).classList.add("active");
+});
+
+const personaIds=["name","owner_name","dialect","tone","identity","energy","humor","sarcasm","max_words","stream_context","game_or_topic","special_instructions","avoid_topics","comment_instruction","join_instruction","gift_instruction","follow_instruction","share_instruction","like_instruction"];
+const behaviorIds=["respond_comments","respond_gifts","respond_follows","respond_shares","respond_joins","respond_likes","join_cooldown","global_cooldown","like_threshold","temperature"];
+const connIds=["tiktok","model","voice_id","vibi_model"];
+
+function val(id){const e=$(id); return e.type==="checkbox"?e.checked:e.value}
+function num(id){return Number($(id).value)}
+function payload(){
+  return {
+    tiktok:val("tiktok"),
+    model:val("model"),
+    openrouter_key:val("openrouter_key"),
+    vibi_key:val("vibi_key"),
+    voice_id:val("voice_id"),
+    vibi_model:val("vibi_model"),
+    persona:{
+      name:val("name"),owner_name:val("owner_name"),dialect:val("dialect"),tone:val("tone"),identity:val("identity"),
+      energy:num("energy"),humor:num("humor"),sarcasm:num("sarcasm"),max_words:num("max_words"),
+      stream_context:val("stream_context"),game_or_topic:val("game_or_topic"),special_instructions:val("special_instructions"),
+      avoid_topics:val("avoid_topics"),comment_instruction:val("comment_instruction"),join_instruction:val("join_instruction"),
+      gift_instruction:val("gift_instruction"),follow_instruction:val("follow_instruction"),share_instruction:val("share_instruction"),like_instruction:val("like_instruction")
+    },
+    behavior:{
+      respond_comments:val("respond_comments"),respond_gifts:val("respond_gifts"),respond_follows:val("respond_follows"),
+      respond_shares:val("respond_shares"),respond_joins:val("respond_joins"),respond_likes:val("respond_likes"),
+      join_cooldown:num("join_cooldown"),global_cooldown:num("global_cooldown"),like_threshold:num("like_threshold"),temperature:num("temperature")
+    }
+  }
+}
+async function api(path,method="GET",body=null,extra=""){
+  const url="/api/backend?path="+encodeURIComponent(path)+(extra||"");
+  const opt={method,headers:{}};
+  if(body!==null){opt.headers["content-type"]="application/json";opt.body=JSON.stringify(body)}
+  const r=await fetch(url,opt); const j=await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(j.error||("HTTP "+r.status)); return j;
+}
+function addLog(msg,kind="status"){
+  const d=document.createElement("div");
+  d.className="row "+(kind==="ai"?"ai":kind==="gift"?"gift":kind==="error"?"error":"statusline");
+  d.innerHTML="<small>"+new Date().toLocaleTimeString("ar-SA")+"</small>"+esc(msg);
+  $("log").appendChild(d); $("log").scrollTop=$("log").scrollHeight;
+}
+function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]))}
+function queueAudio(b64,mime){audioQueue.push({b64,mime});playNext()}
+async function playNext(){
+  if(playing||!audioQueue.length)return; playing=true;
+  const x=audioQueue.shift(),a=new Audio("data:"+(x.mime||"audio/mpeg")+";base64,"+x.b64);
+  a.onended=()=>{playing=false;playNext()};a.onerror=()=>{playing=false;playNext()};
+  try{await a.play()}catch{playing=false;addLog("المتصفح منع الصوت التلقائي؛ اضغط داخل الصفحة ثم جرّب.","error")}
+}
+async function testAll(){
+  addLog("جاري فحص TikTok وOpenRouter وVibi...");
+  try{
+    const j=await api("test","POST",payload());
+    $("stOR").textContent=j.openrouter.message;$("stOR").className=j.openrouter.ok?"ok":"bad";
+    $("stVibi").textContent=j.vibi.message;$("stVibi").className=j.vibi.ok?"ok":"bad";
+    $("stTikTok").textContent=j.tiktok.message;$("stTikTok").className=j.tiktok.ok?"ok":"bad";
+    addLog(j.ok?"كل الاتصالات ناجحة ✓":"فيه اتصال يحتاج تعديل",j.ok?"status":"error");
+  }catch(e){addLog(e.message,"error")}
+}
+async function startAgent(){try{const j=await api("start","POST",payload());addLog((j.agent_name||"الوكيل")+": "+(j.message||"بدأ التشغيل"))}catch(e){addLog(e.message,"error")}}
+async function stopAgent(){try{await api("stop","POST",{});addLog("تم الإيقاف")}catch(e){addLog(e.message,"error")}}
+async function previewVoice(){
+  $("previewReply").textContent="جاري توليد الرد والصوت...";
+  const p=payload();p.preview_type=val("preview_type");p.preview_text=val("preview_text");
+  try{const j=await api("preview","POST",p);$("previewReply").textContent="الرد: "+j.reply;if(j.audio_b64)queueAudio(j.audio_b64,j.mime)}catch(e){$("previewReply").textContent=e.message}
+}
+async function pollStatus(){
+  try{
+    const j=await api("status");
+    $("stTikTok").textContent=j.tiktok||"—";$("stTikTok").className=j.tiktok==="LIVE"?"ok":j.tiktok==="ERROR"?"bad":"warn";
+    $("stRoom").textContent=j.room_id||"—";
+    $("liveBadge").textContent=j.tiktok==="LIVE"?"● LIVE متصل":"● "+(j.tiktok||"غير متصل");
+    $("liveBadge").style.color=j.tiktok==="LIVE"?"var(--ok)":"var(--warn)";
+  }catch{}
+}
+async function pollEvents(){
+  try{
+    const j=await api("events","GET",null,"&since="+lastId);
+    for(const e of (j.events||[])){lastId=Math.max(lastId,e.id||0);addLog(e.message,e.kind);if(e.audio_b64)queueAudio(e.audio_b64,e.mime)}
+  }catch{}
+}
+function saveSettings(){
+  const data={};[...personaIds,...behaviorIds,...connIds].forEach(id=>data[id]=val(id));
+  localStorage.setItem("cyber-live-settings-v2",JSON.stringify(data));addLog("تم حفظ إعدادات الشخصية على هذا الجهاز");
+}
+function loadSettings(){
+  try{
+    const data=JSON.parse(localStorage.getItem("cyber-live-settings-v2")||"{}");
+    Object.entries(data).forEach(([id,v])=>{const e=$(id);if(!e)return;if(e.type==="checkbox")e.checked=!!v;else e.value=v});
+    ["energy","humor","sarcasm"].forEach(id=>$(id+"V").value=$(id).value);
+  }catch{}
+}
+function resetSettings(){localStorage.removeItem("cyber-live-settings-v2");location.reload()}
+loadSettings();pollStatus();pollEvents();setInterval(pollStatus,2500);setInterval(pollEvents,1400);
+</script>
+</body>
+</html>
