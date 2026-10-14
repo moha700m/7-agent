@@ -273,7 +273,7 @@ async function pollStatus(){
 async function pollEvents(){
   try{
     const j=await api("events","GET",null,"&since="+lastId);
-    for(const e of (j.events||[])){lastId=Math.max(lastId,e.id||0);addLog(e.message,e.kind);if(e.audio_b64)queueAudio(e.audio_b64,e.mime)}
+    for(const e of (j.events||[])){lastId=Math.max(lastId,e.id||0);addLog(e.message,e.kind)}
   }catch{}
 }
 function saveSettings(silent=false){
