@@ -136,9 +136,9 @@ hr{border:0;border-top:1px solid var(--line);margin:15px 0}
     <div class="card">
       <div class="title">OpenRouter + ElevenLabs v4 Turbo</div>
       <div class="grid">
-        <div><label>OpenRouter Key</label><input id="openrouter_key" type="password" placeholder="sk-or-v1-..."><div class="secretNote">يبقى داخل جلسة المتصفح ولا يُحفظ ضمن إعدادات الشخصية.</div></div>
+        <div><label>OpenRouter Key</label><input id="openrouter_key" type="password" placeholder="sk-or-v1-..."><div id="orSecretNote" class="secretNote">يُحفظ بشكل مشفّر وآمن على هذا المتصفح بعد أول اختبار أو تشغيل.</div></div>
         <div><label>الموديل</label><input id="model" value="google/gemini-2.5-flash"></div>
-        <div><label>Vibi Key - احتياطي اختياري</label><input id="vibi_key" type="password" placeholder="اختياري"><div class="secretNote">الصوت الأساسي صار ElevenLabs v4 Turbo عبر OpenRouter.</div></div>
+        <div><label>Vibi Key - احتياطي اختياري</label><input id="vibi_key" type="password" placeholder="اختياري"><div id="vibiSecretNote" class="secretNote">يُحفظ بشكل مشفّر وآمن على هذا المتصفح بعد أول اختبار أو تشغيل.</div></div>
         <div><label>ElevenLabs Voice</label><input id="tts_voice" value="george"></div>
         <div><label>TTS Model</label><input id="tts_model" value="elevenlabs/eleven-v4-turbo" readonly></div>
         <div><label>Vibi Voice ID - احتياطي</label><input id="voice_id" value="rpGHcNQJvO8dFNNFNj1v"></div>
@@ -171,7 +171,7 @@ hr{border:0;border-top:1px solid var(--line);margin:15px 0}
       <button class="secondary" onclick="saveSettings()">حفظ إعدادات الشخصية على هذا الجهاز</button>
       <button class="secondary" onclick="resetSettings()">رجوع للإعدادات المقترحة</button>
     </div>
-    <div class="hint">الحفظ المحلي يشمل إعدادات الشخصية والسلوك فقط. مفاتيح OpenRouter وVibi لا تُحفظ في Local Storage.</div>
+    <div class="hint">كل إعداداتك تُحفظ تلقائيًا على هذا الجهاز. المفاتيح السرية تُحفظ بشكل مشفّر في Cookie آمن ولا تظهر داخل Local Storage.</div>
   </div>
 </div>
 
@@ -242,6 +242,7 @@ async function playNext(){
   try{await a.play()}catch{playing=false;addLog("المتصفح منع الصوت التلقائي؛ اضغط داخل الصفحة ثم جرّب.","error")}
 }
 async function testAll(){
+  saveSettings(true);
   addLog("جاري فحص TikTok وOpenRouter وVibi...");
   try{
     const j=await api("test","POST",payload());
@@ -249,11 +250,13 @@ async function testAll(){
     $("stVibi").textContent=(j.tts&&j.tts.message)||j.vibi.message;$("stVibi").className=(j.tts&&j.tts.ok)?"ok":"bad";
     $("stTikTok").textContent=j.tiktok.message;$("stTikTok").className=j.tiktok.ok?"ok":"bad";
     addLog(j.ok?"كل الاتصالات ناجحة ✓":"فيه اتصال يحتاج تعديل",j.ok?"status":"error");
+    loadSecretStatus();
   }catch(e){addLog(e.message,"error")}
 }
-async function startAgent(){try{const j=await api("start","POST",payload());addLog((j.agent_name||"الوكيل")+": "+(j.message||"بدأ التشغيل"))}catch(e){addLog(e.message,"error")}}
+async function startAgent(){saveSettings(true);try{const j=await api("start","POST",payload());addLog((j.agent_name||"الوكيل")+": "+(j.message||"بدأ التشغيل"));loadSecretStatus()}catch(e){addLog(e.message,"error")}}
 async function stopAgent(){try{await api("stop","POST",{});addLog("تم الإيقاف")}catch(e){addLog(e.message,"error")}}
 async function previewVoice(){
+  saveSettings(true);
   $("previewReply").textContent="جاري توليد الرد والصوت...";
   const p=payload();p.preview_type=val("preview_type");p.preview_text=val("preview_text");
   try{const j=await api("preview","POST",p);$("previewReply").textContent="الرد: "+j.reply;if(j.audio_b64)queueAudio(j.audio_b64,j.mime)}catch(e){$("previewReply").textContent=e.message}
@@ -273,9 +276,10 @@ async function pollEvents(){
     for(const e of (j.events||[])){lastId=Math.max(lastId,e.id||0);addLog(e.message,e.kind);if(e.audio_b64)queueAudio(e.audio_b64,e.mime)}
   }catch{}
 }
-function saveSettings(){
+function saveSettings(silent=false){
   const data={};[...personaIds,...behaviorIds,...connIds].forEach(id=>data[id]=val(id));
-  localStorage.setItem("cyber-live-settings-v3",JSON.stringify(data));addLog("تم حفظ إعدادات الشخصية على هذا الجهاز");
+  localStorage.setItem("cyber-live-settings-v3",JSON.stringify(data));
+  if(!silent)addLog("تم حفظ كل الإعدادات على هذا الجهاز");
 }
 function loadSettings(){
   try{
@@ -284,8 +288,26 @@ function loadSettings(){
     ["energy","humor","sarcasm"].forEach(id=>$(id+"V").value=$(id).value);
   }catch{}
 }
+async function loadSecretStatus(){
+  try{
+    const j=await api("secret_status");
+    if(j.openrouter_saved){
+      $("openrouter_key").placeholder="محفوظ بأمان — اتركه فارغ";
+      $("orSecretNote").textContent="مفتاح OpenRouter محفوظ ومشفّر على هذا المتصفح.";
+    }
+    if(j.vibi_saved){
+      $("vibi_key").placeholder="محفوظ بأمان — اتركه فارغ";
+      $("vibiSecretNote").textContent="مفتاح Vibi محفوظ ومشفّر على هذا المتصفح.";
+    }
+  }catch{}
+}
 function resetSettings(){localStorage.removeItem("cyber-live-settings-v3");location.reload()}
-loadSettings();pollStatus();pollEvents();setInterval(pollStatus,2500);setInterval(pollEvents,1400);
+loadSettings();
+[...personaIds,...behaviorIds,...connIds].forEach(id=>{
+  const e=$(id); if(!e)return;
+  e.addEventListener(e.type==="checkbox"?"change":"input",()=>saveSettings(true));
+});
+pollStatus();pollEvents();loadSecretStatus();setInterval(pollStatus,2500);setInterval(pollEvents,1400);
 </script>
 </body>
 </html>
