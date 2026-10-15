@@ -20,7 +20,7 @@ async function ensureCapability(){
 const playerId=crypto.randomUUID(),queue=[],seen=new Set();
 let busy=false,current=null,lastId=0,boot="",epoch=null,active=false,finishedId=null,failed=false;
 let watchdog=null,retryTimer=null,streamTimer=null,finishTimer=null,playbackChanges={};
-let pcmCtx=null,pcmGain=null,pcmSources=[];
+let pcmCtx=null,pcmGain=null,pcmSources=[],pcmReady=false;
 if(new URLSearchParams(location.search).has("controls"))document.getElementById("controls").style.display="block";
 
 async function api(path,body=null,query={}){
@@ -77,12 +77,20 @@ function playFile(item){
 async function ensurePcm(){
   if(!pcmCtx){
     const C=window.AudioContext||window.webkitAudioContext;
-    if(!C)throw new Error("WebAudio غير مدعوم");
+    if(!C){pcmReady=false;throw new Error("WebAudio غير مدعوم");}
     pcmCtx=new C();pcmGain=pcmCtx.createGain();pcmGain.connect(pcmCtx.destination);
+    pcmCtx.onstatechange=()=>{pcmReady=pcmCtx.state==="running";};
   }
-  if(pcmCtx.state==="suspended")await pcmCtx.resume();
+  if(pcmCtx.state==="suspended"){
+    try{await pcmCtx.resume();}catch{}
+  }
+  pcmReady=pcmCtx.state==="running";
+  if(!pcmReady)throw new Error("WebAudio autoplay غير متاح");
   pcmGain.gain.value=audio.muted?0:audio.volume;
   return pcmCtx;
+}
+async function probePcm(){
+  try{await ensurePcm();}catch{pcmReady=false;}
 }
 function schedulePcm(b64,sampleRate,item){
   const binary=atob(b64),bytes=Uint8Array.from(binary,c=>c.charCodeAt(0));
@@ -125,7 +133,7 @@ function playNext(){
 async function poll(){
   try{
     const sentFinished=finishedId;
-    const hb=await api("player/heartbeat",{player_id:playerId,boot_id:boot,busy,queue_size:queue.length,current_id:current?.id||null,finished_id:sentFinished,failed,pcm_streaming:true,...playbackChanges});
+    const hb=await api("player/heartbeat",{player_id:playerId,boot_id:boot,busy,queue_size:queue.length,current_id:current?.id||null,finished_id:sentFinished,failed,pcm_streaming:pcmReady,...playbackChanges});
     playbackChanges={};if(sentFinished===finishedId){finishedId=null;failed=false;}
     active=hb.active;
     if(hb.force_reset){
@@ -158,5 +166,5 @@ async function poll(){
 document.getElementById("unlock").onclick=async()=>{try{await ensurePcm();if(current?.stream)pollChunks(current);else if(current)tryPlay(current);else playNext();}catch{}};
 document.getElementById("volume").oninput=e=>{audio.volume=Number(e.target.value);if(pcmGain)pcmGain.gain.value=audio.muted?0:audio.volume;playbackChanges.volume=audio.volume;};
 document.getElementById("mute").onchange=e=>{audio.muted=e.target.checked;if(pcmGain)pcmGain.gain.value=audio.muted?0:audio.volume;playbackChanges.muted=audio.muted;};
-window.addEventListener("beforeunload",resetAudio);poll();
+window.addEventListener("beforeunload",resetAudio);probePcm().finally(poll);
 </script></body></html>
