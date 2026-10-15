@@ -189,7 +189,7 @@ hr{border:0;border-top:1px solid var(--line);margin:15px 0}.modeInfo{margin-top:
         <div><label>OpenRouter Key</label><input id="openrouter_key" type="password" placeholder="sk-or-v1-..."><div id="orSecretNote" class="secretNote">يُحفظ بشكل مشفّر وآمن على هذا المتصفح بعد أول اختبار أو تشغيل.</div></div>
         <div><label>الموديل</label><input id="model" value="google/gemini-3.8-flash"></div>
         <div><label>Vibi Key - احتياطي اختياري</label><input id="vibi_key" type="password" placeholder="اختياري"><div id="vibiSecretNote" class="secretNote">يُحفظ بشكل مشفّر وآمن على هذا المتصفح بعد أول اختبار أو تشغيل.</div></div>
-        <div><label>ElevenLabs Voice</label><input id="tts_voice" value="s83SAGdFTflAwJcAV81K"><div class="hint">Saudi Native: Adeeb — يتبدل تلقائيًا لصوت سعودي أنثوي مع الشخصيات الأنثوية.</div></div>
+        <div><label>ElevenLabs Voice</label><input id="tts_voice" value="yXEnnEln9armDCyhkXcA"><div class="hint">Saudi Native: Jeddawi — صوت رجالي سعودي أوضح. يتبدل تلقائيًا للصوت الأنثوي مع الشخصيات الأنثوية.</div></div>
         <div><label>TTS Model</label><input id="tts_model" value="elevenlabs/eleven-v4-turbo" readonly></div>
         <div><label>Vibi Voice ID - احتياطي</label><input id="voice_id" value="rpGHcNQJvO8dFNNFNj1v"></div>
         <div><label>Vibi Model - احتياطي</label><input id="vibi_model" value="eleven_v3"></div>
@@ -420,6 +420,7 @@ function loadSettings(){
   try{
     const data=JSON.parse(localStorage.getItem("cyber-live-settings-v4")||localStorage.getItem("cyber-live-settings-v3")||"{}");
     Object.entries(data).forEach(([id,v])=>{const e=$(id);if(!e)return;if(e.type==="checkbox")e.checked=!!v;else e.value=v});
+    if($("tts_voice")&&$("tts_voice").value==="s83SAGdFTflAwJcAV81K")$("tts_voice").value="yXEnnEln9armDCyhkXcA";
     ["energy","humor","sarcasm"].forEach(id=>$(id+"V").value=$(id).value);
   }catch{}
 }
