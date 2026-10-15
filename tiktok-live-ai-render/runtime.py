@@ -616,12 +616,10 @@ class HostRuntime:
     def commentator_status(self):
         with self.lock:
             cfg=copy.deepcopy(self.cfg)
-            running=self.running
         self.commentator.ensure_running()
-        if running and cfg.get("race_commentator_enabled"):
-            age=time.time()-self.commentator.last_poll if self.commentator.last_poll else 999
-            if age>3:
-                self.commentator.probe()
+        age=time.time()-self.commentator.last_poll if self.commentator.last_poll else 999
+        if age>3:
+            self.commentator.probe()
         return dict(ok=True, **self.commentator.status(cfg))
 
     def commentator_configure(self, data):
