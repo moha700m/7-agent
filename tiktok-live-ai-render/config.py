@@ -94,7 +94,8 @@ def build_config(data):
     # English-native stock voices are the main source of broken Saudi Arabic.
     # Auto-upgrade them to public Saudi-native ElevenLabs library voices.
     stock_english=set(voices)
-    if result.get("saudi_voice_auto",True) and result["tts_voice"].lower() in stock_english:
-        result["tts_voice"] = "gVzwmdZzRgBrNjXaTmi5" if result["voice_gender"]=="أنثى" else "s83SAGdFTflAwJcAV81K"
-    result["tts_voice_label"] = "Layan — Saudi Najdi" if result["voice_gender"]=="أنثى" and result["tts_voice"]=="gVzwmdZzRgBrNjXaTmi5" else ("Adeeb — Saudi Natural" if result["tts_voice"]=="s83SAGdFTflAwJcAV81K" else result["tts_voice"])
+    old_saudi_male={"s83SAGdFTflAwJcAV81K"}
+    if result.get("saudi_voice_auto",True) and (result["tts_voice"].lower() in stock_english or result["tts_voice"] in old_saudi_male):
+        result["tts_voice"] = "gVzwmdZzRgBrNjXaTmi5" if result["voice_gender"]=="أنثى" else "yXEnnEln9armDCyhkXcA"
+    result["tts_voice_label"] = "Layan — Saudi" if result["voice_gender"]=="أنثى" and result["tts_voice"]=="gVzwmdZzRgBrNjXaTmi5" else ("Jeddawi — Saudi Male" if result["tts_voice"]=="yXEnnEln9armDCyhkXcA" else result["tts_voice"])
     return result
