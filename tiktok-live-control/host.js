@@ -1,8 +1,52 @@
 /* Dashboard extensions. LIVE audio is intentionally absent from this file. */
-const hostIds=["personality_mode","topic_profile","mood_override","persona_min_duration","idle_threshold","max_proactive_per_10min","memory_ttl_hours","proactive_enabled","crowd_enabled","allow_profile_persona","secondary_model","third_model","tts_provider","tts_fallback"];
+const hostIds=["personality_mode","topic_profile","mood_override","persona_min_duration","idle_threshold","max_proactive_per_10min","memory_ttl_hours","proactive_enabled","crowd_enabled","allow_profile_persona","secondary_model","third_model","tts_provider","tts_fallback",
+"self_host_enabled","self_host_mode","self_host_activity","self_host_idle_before_start","self_host_min_gap","self_host_max_gap","self_host_max_consecutive","self_host_banter_level","self_host_question_frequency","self_host_topic_repeat_cooldown","self_host_topic_timeout","self_host_allow_stories","self_host_allow_debates","self_host_allow_banter","self_host_allow_challenges","self_host_allow_polls"];
 let currentStatus={},TOPIC_PROFILES={};
 const statFields={mood:"Current Mood",crowd_state:"Crowd State",queue_size:"Queue Size",current_ai_model:"AI Model",current_tts_provider:"TTS Provider",latency:"Latency",comments_per_min:"Comments/min",gifts_per_min:"Gifts/min",replies_per_min:"Replies/min",suppressed_spam:"Suppressed spam",deduped_messages:"Deduped messages",reconnect_attempts:"Reconnect attempts",player_connected:"Player",paused:"Responses",last_error:"Last error"};
 $("advancedStats").innerHTML=Object.entries(statFields).map(([key,label])=>'<div class="stat"><b>'+esc(label)+'</b><span id="host_'+key+'">—</span></div>').join("");
+const hostPanel=document.getElementById("host");
+if(hostPanel){
+  const first=hostPanel.querySelector(".card");
+  first.insertAdjacentHTML("afterend",`
+  <div class="card" id="selfHostCard">
+    <div class="title">SELF HOST MODE — سوالف تلقائية</div>
+    <div class="grid3">
+      <label class="toggle"><input id="self_host_enabled" type="checkbox" checked> تشغيل المضيف التلقائي</label>
+      <div><label>Mode</label><select id="self_host_mode"><option value="auto">Auto</option><option value="manual">Manual</option></select></div>
+      <div><label>Host Activity</label><select id="self_host_activity"><option value="low">Low</option><option value="normal" selected>Normal</option><option value="high">High</option><option value="chaos">Chaos</option></select></div>
+      <div><label>Idle before talking</label><input id="self_host_idle_before_start" type="number" min="10" max="120" value="20"></div>
+      <div><label>Min speaking gap</label><input id="self_host_min_gap" type="number" min="10" max="60" value="20"></div>
+      <div><label>Max speaking gap</label><input id="self_host_max_gap" type="number" min="15" max="120" value="40"></div>
+      <div><label>Max consecutive lines</label><input id="self_host_max_consecutive" type="number" min="1" max="5" value="2"></div>
+      <div><label>Banter Level</label><input id="self_host_banter_level" type="number" min="0" max="10" value="6"></div>
+      <div><label>Question Frequency</label><select id="self_host_question_frequency"><option value="low">Low</option><option value="medium">Medium</option><option value="high" selected>High</option></select></div>
+      <div><label>Topic Repeat Cooldown (sec)</label><input id="self_host_topic_repeat_cooldown" type="number" min="300" max="3600" value="1200"></div>
+      <div><label>Topic Timeout (sec)</label><input id="self_host_topic_timeout" type="number" min="30" max="300" value="90"></div>
+      <label class="toggle"><input id="self_host_allow_stories" type="checkbox" checked> Stories</label>
+      <label class="toggle"><input id="self_host_allow_debates" type="checkbox" checked> Gaming Debates</label>
+      <label class="toggle"><input id="self_host_allow_banter" type="checkbox" checked> Banter</label>
+      <label class="toggle"><input id="self_host_allow_challenges" type="checkbox" checked> Challenges</label>
+      <label class="toggle"><input id="self_host_allow_polls" type="checkbox" checked> Quick Polls</label>
+    </div>
+    <div class="grid3" style="margin-top:12px">
+      <div class="stat"><b>State</b><span id="sh_state">—</span></div>
+      <div class="stat"><b>Current Topic</b><span id="sh_topic">—</span></div>
+      <div class="stat"><b>Engagement</b><span id="sh_engagement">0</span></div>
+      <div class="stat"><b>Participants</b><span id="sh_participants">0</span></div>
+      <div class="stat"><b>Next Speak</b><span id="sh_next">—</span></div>
+      <div class="stat"><b>Last Line</b><span id="sh_last">—</span></div>
+    </div>
+    <div class="actions">
+      <button class="accent" onclick="applySelfHost()">تطبيق Self Host</button>
+      <button class="secondary" onclick="selfHostAction('speak-now')">Speak Now</button>
+      <button class="secondary" onclick="selfHostAction('new-topic')">New Topic</button>
+      <button class="secondary" onclick="selfHostAction('stop-topic')">Stop Topic</button>
+      <button class="secondary" onclick="selfHostAction('pause')">أنا أتكلم الآن</button>
+      <button class="secondary" onclick="selfHostAction('resume')">رجع AI</button>
+    </div>
+    <p class="hint">أي تعليق أو متابعة أو هدية أو مشاركة حقيقية تأخذ الأولوية على السوالف التلقائية.</p>
+  </div>`);
+}
 function hostPayload(){
   const out={};
   for(const id of hostIds){const e=$(id);out[id]=e.type==="checkbox"?e.checked:e.type==="number"?Number(e.value):e.value;}
@@ -24,6 +68,12 @@ function renderHostStatus(j){
   const merged={...m,...j,latency:(m.average_response_latency||0)+"s",player_connected:j.player_connected?"متصل":"بانتظار المشغل",paused:j.paused?"Paused":"Active"};
   for(const key of Object.keys(statFields))$("host_"+key).textContent=merged[key]??"—";
   $("muteButton").textContent=j.muted?"Unmute AI":"Mute AI";
+  if($("sh_state"))$("sh_state").textContent=j.self_host_state||"—";
+  if($("sh_topic"))$("sh_topic").textContent=j.current_topic||"—";
+  if($("sh_engagement"))$("sh_engagement").textContent=(j.topic_engagement??0)+"/100";
+  if($("sh_participants"))$("sh_participants").textContent=j.topic_participants??0;
+  if($("sh_next"))$("sh_next").textContent=(j.next_self_host_in??0)+"s";
+  if($("sh_last"))$("sh_last").textContent=j.last_self_host_line||"—";
   const metrics=$("sessionMetrics");metrics.replaceChildren();
   for(const [key,value] of Object.entries(m)){
     if(key.endsWith("_per_min"))continue;
@@ -38,6 +88,18 @@ function renderInspector(e){
   addLog([e.event_type?.toUpperCase(),"@"+(e.username||"viewer"),'"'+(e.text||"")+'"',"Class: "+(c.category||"—"),"Priority: "+e.priority,"Decision: "+e.decision,e.ignored_reason?"Reason: "+e.ignored_reason:"",e.ai_reply?"AI: "+e.ai_reply:"",e.latency!=null?"Latency: "+e.latency+"s":""].filter(Boolean).join(" | "),e.decision==="ERROR"?"error":e.decision==="REPLY"?"ai":"status");
 }
 async function applyHost(){saveSettings(true);try{await api("configure","POST",payload());addLog("تم تطبيق إعدادات المضيف");loadSecretStatus();pollStatus();}catch(e){addLog(e.message,"error");}}
+function selfHostPayload(){
+  const out={};for(const id of hostIds.filter(x=>x.startsWith("self_host_"))){const e=$(id);if(e)out[id]=e.type==="checkbox"?e.checked:e.type==="number"?Number(e.value):e.value;}return out;
+}
+async function applySelfHost(){
+  saveSettings(true);
+  try{await api("self-host/configure","POST",selfHostPayload());addLog("تم تطبيق وضع السوالف التلقائي");pollStatus();}
+  catch(e){addLog(e.message,"error");}
+}
+async function selfHostAction(action){
+  try{await api("self-host/"+action,"POST",{});addLog("Self Host: "+action);pollStatus();}
+  catch(e){addLog(e.message,"error");}
+}
 async function forceCharacter(){setField("personality_mode","manual");await changeBroadcastMode();}
 async function control(action,extra={}){try{await api("control","POST",{action,...extra});pollStatus();}catch(e){addLog(e.message,"error");}}
 async function toggleMute(){await control("mute",{muted:!currentStatus.muted});}
@@ -82,6 +144,9 @@ async function simulate(type){
   }catch(e){$("simResult").textContent=e.message;}
 }
 for(const type of ["comment","join","gift","follow","share","like","burst"]){const b=document.createElement("button");b.className="secondary";b.textContent="Fake "+type;b.onclick=()=>simulate(type);$("simulationButtons").append(b);}
+for(const [type,label] of [["idle","Simulate Idle 30s"],["topic_response","Topic Response"],["no_response","No Response"],["owner_talking","Owner Talking"]]){
+  const b=document.createElement("button");b.className="secondary";b.textContent=label;b.onclick=async()=>{try{const body={type,username:val("sim_user"),text:val("sim_text"),seconds:30,value:true};const j=await api("simulate","POST",body);$("simResult").textContent="Simulation: "+label+" ✓";pollStatus();}catch(e){$("simResult").textContent=e.message;}};$("simulationButtons").append(b);
+}
 async function pollHealth(){try{$("healthDetails").textContent=JSON.stringify(await api("health/details"),null,2);}catch(e){$("healthDetails").textContent=e.message;}}
 pollHealth();setInterval(pollHealth,5000);
 
