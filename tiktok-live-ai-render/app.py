@@ -43,6 +43,7 @@ class RaceGame:
         self.last_tiktok_event = ""
         self.last_tiktok_event_at = 0.0
         self.last_state_log_at = 0.0
+        self.game_loop_pid = os.getpid()
         threading.Thread(target=self._game_loop, daemon=True).start()
         threading.Thread(target=self._tiktok_loop, daemon=True).start()
 
@@ -191,6 +192,15 @@ class RaceGame:
         if self.phase == "finished" and now - self.phase_started >= RESULT_SECONDS:
             self._next_round()
 
+    def _ensure_game_loop(self):
+        pid = os.getpid()
+        with self.lock:
+            if self.game_loop_pid == pid:
+                return
+            self.game_loop_pid = pid
+        threading.Thread(target=self._game_loop, daemon=True).start()
+        print(f"RACE_GAME_LOOP_STARTED pid={pid} game={id(self)}", flush=True)
+
     def _game_loop(self):
         last = time.time()
         while not self.stop.wait(.1):
@@ -201,6 +211,7 @@ class RaceGame:
                 self._tick(dt)
 
     def state(self):
+        self._ensure_game_loop()
         with self.lock:
             now = time.time()
             players = sorted(self.players.values(), key=lambda p: (p["progress"], p["boost"]), reverse=True)
