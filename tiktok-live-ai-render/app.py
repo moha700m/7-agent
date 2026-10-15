@@ -4,6 +4,8 @@ import time
 import random
 import asyncio
 import threading
+import json
+from urllib.parse import urlencode
 import requests
 from flask import Flask, jsonify, request, Response
 from TikTokLive import TikTokLiveClient
@@ -14,6 +16,8 @@ app = Flask(__name__)
 TIKTOK_USERNAME = os.getenv("TIKTOK_USERNAME", "mgz7o2").lstrip("@")
 DEMO_TOKEN = os.getenv("DEMO_TOKEN", "")
 INTERNAL_EVENT_TOKEN = os.getenv("INTERNAL_EVENT_TOKEN", "")
+EULER_API_KEY = os.getenv("EULER_API_KEY", "").strip()
+PRESENCE_LEAVE_AFTER = max(5, int(os.getenv("PRESENCE_LEAVE_AFTER", "20")))
 PORT = int(os.getenv("PORT", "10000"))
 MAX_PLAYERS = int(os.getenv("MAX_PLAYERS", "24"))
 WAIT_SECONDS = float(os.getenv("WAIT_SECONDS", "16"))
@@ -44,8 +48,12 @@ class RaceGame:
         self.last_tiktok_event_at = 0.0
         self.last_state_log_at = 0.0
         self.game_loop_pid = os.getpid()
+        self.presence_connected = False
+        self.presence_mode = "tiktok-events"
         threading.Thread(target=self._game_loop, daemon=True).start()
         threading.Thread(target=self._tiktok_loop, daemon=True).start()
+        if EULER_API_KEY:
+            threading.Thread(target=self._euler_presence_loop, daemon=True).start()
 
     def _record_tiktok_event(self, kind, username="", extra=""):
         with self.lock:
@@ -114,6 +122,37 @@ class RaceGame:
             else:
                 self.waiting_next[username] = (str(name or username).strip()[:24] or username)
                 print(f"RACE_JOIN queued user={username} phase={self.phase} players={len(self.players)} queued={len(self.waiting_next)}", flush=True)
+
+    def leave(self, username, reason="presence"):
+        username = str(username or "").strip()[:80]
+        if not username:
+            return False
+        removed = False
+        with self.lock:
+            if username in self.players:
+                self.players.pop(username, None)
+                removed = True
+            if username in self.waiting_next:
+                self.waiting_next.pop(username, None)
+                removed = True
+
+            if removed:
+                self.events += 1
+                if self.phase in ("waiting", "countdown"):
+                    if len(self.players) < 2:
+                        self.phase = "waiting"
+                        self.phase_started = time.time()
+                elif self.phase == "racing":
+                    if not self.players:
+                        self.phase = "waiting"
+                        self.phase_started = time.time()
+                        self.winners = []
+                    elif all(p["finished_at"] is not None for p in self.players.values()):
+                        self._finish()
+
+        if removed:
+            print(f"RACE_LEAVE user={username} pid={os.getpid()} game={id(self)} reason={reason} phase={self.phase} players={len(self.players)} queued={len(self.waiting_next)}", flush=True)
+        return removed
 
     def boost(self, username, amount):
         with self.lock:
@@ -234,7 +273,8 @@ class RaceGame:
                 players=players, player_count=len(players), waiting_next=len(self.waiting_next),
                 winners=self.winners, leaderboard=leaders, max_players=MAX_PLAYERS,
                 last_error=self.last_error, reconnects=self.reconnects, events=self.events,
-                last_tiktok_event=self.last_tiktok_event, last_tiktok_event_at=self.last_tiktok_event_at
+                last_tiktok_event=self.last_tiktok_event, last_tiktok_event_at=self.last_tiktok_event_at,
+                presence_mode=self.presence_mode, presence_connected=self.presence_connected
             )
 
     def demo(self, count=8):
@@ -242,6 +282,88 @@ class RaceGame:
             for i in range(max(2, min(MAX_PLAYERS, int(count)))):
                 self.join(f"demo_{self.round}_{i}", f"لاعب {i+1}")
             self._countdown()
+
+    def _euler_presence_loop(self):
+        if not EULER_API_KEY:
+            return
+
+        while not self.stop.is_set():
+            try:
+                import websockets
+
+                async def presence_session():
+                    params = {
+                        "uniqueId": TIKTOK_USERNAME,
+                        "apiKey": EULER_API_KEY,
+                        "schemaVersion": "v2",
+                        "features.bundleEvents": "true",
+                        "features.syntheticPresence": "true",
+                        "features.syntheticPresenceLeaveAfter": str(PRESENCE_LEAVE_AFTER),
+                        "features.normalizeUniqueId": "true",
+                    }
+                    url = "wss://ws.eulerstream.com?" + urlencode(params)
+                    async with websockets.connect(
+                        url,
+                        max_size=8 * 1024 * 1024,
+                        ping_interval=20,
+                        ping_timeout=20,
+                        close_timeout=5,
+                    ) as ws:
+                        with self.lock:
+                            self.presence_connected = True
+                            self.presence_mode = "euler-synthetic-presence"
+                        print(f"RACE_PRESENCE_CONNECTED leave_after={PRESENCE_LEAVE_AFTER}", flush=True)
+
+                        async for raw in ws:
+                            if isinstance(raw, bytes):
+                                try:
+                                    raw = raw.decode("utf-8")
+                                except Exception:
+                                    continue
+                            try:
+                                payload = json.loads(raw)
+                            except Exception:
+                                continue
+
+                            if isinstance(payload, dict) and isinstance(payload.get("messages"), list):
+                                messages = payload["messages"]
+                            elif isinstance(payload, list):
+                                messages = payload
+                            elif isinstance(payload, dict):
+                                messages = [payload]
+                            else:
+                                messages = []
+
+                            for msg in messages:
+                                if not isinstance(msg, dict):
+                                    continue
+                                kind = str(msg.get("type") or msg.get("messageType") or "")
+                                data = msg.get("data") if isinstance(msg.get("data"), dict) else {}
+                                user = data.get("user") if isinstance(data.get("user"), dict) else {}
+                                username = str(
+                                    user.get("displayId")
+                                    or user.get("uniqueId")
+                                    or user.get("unique_id")
+                                    or ""
+                                ).lstrip("@").strip()
+                                name = str(user.get("nickname") or username)
+
+                                if kind == "SyntheticJoinMessage" and username:
+                                    self._relay_tiktok("PRESENCE_JOIN", username, name, room_id=str(self.room_id or ""))
+                                elif kind == "SyntheticLeaveMessage" and username:
+                                    self._relay_tiktok("PRESENCE_LEAVE", username, name, room_id=str(self.room_id or ""))
+
+                asyncio.run(presence_session())
+            except Exception as exc:
+                with self.lock:
+                    self.presence_connected = False
+                    if EULER_API_KEY:
+                        self.presence_mode = "presence-reconnecting"
+                print(f"RACE_PRESENCE_RECONNECT {type(exc).__name__}: {exc}", flush=True)
+                self.stop.wait(3)
+
+        with self.lock:
+            self.presence_connected = False
 
     def _tiktok_loop(self):
         attempt = 0
@@ -808,7 +930,7 @@ def internal_tiktok_event():
             GAME.live = "RECONNECTING"
             GAME.room_id = None
 
-    if kind in {"JOIN", "COMMENT", "FOLLOW", "LIKE", "SHARE", "GIFT"} and username:
+    if kind in {"JOIN", "COMMENT", "FOLLOW", "LIKE", "SHARE", "GIFT", "PRESENCE_JOIN"} and username:
         GAME._record_tiktok_event(kind, username)
         GAME.join(username, name)
         if kind == "FOLLOW":
@@ -821,6 +943,9 @@ def internal_tiktok_event():
         elif kind == "GIFT":
             diamonds = max(0, int(body.get("diamonds", 0) or 0))
             GAME.boost(username, min(.22, .04 + math.log10(max(1, diamonds)) * .05))
+    elif kind == "PRESENCE_LEAVE" and username:
+        GAME._record_tiktok_event(kind, username)
+        GAME.leave(username, reason="euler-presence")
 
     st = GAME.state()
     return jsonify(ok=True, live=st["live"], players=st["player_count"], phase=st["phase"])
