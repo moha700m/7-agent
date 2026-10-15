@@ -48,7 +48,8 @@ function remember(id){
   try{sessionStorage.setItem("live-played",JSON.stringify({boot,ids:[...seen]}));}catch{}
 }
 function finish(item,error=false){
-  if(current!==item)return;
+  if(current!==item||item.finished)return;
+  item.finished=true;
   clearTimeout(retryTimer);clearTimeout(watchdog);clearTimeout(streamTimer);clearTimeout(finishTimer);
   audio.onended=audio.onerror=null;audio.pause();if(item.url)URL.revokeObjectURL(item.url);
   finishedId=item.id;failed=error;current=null;busy=false;pcmSources=[];playNext();
@@ -70,7 +71,7 @@ function playFile(item){
     const binary=atob(item.audio_b64),bytes=Uint8Array.from(binary,c=>c.charCodeAt(0));item.audio_b64="";
     item.url=URL.createObjectURL(new Blob([bytes],{type:item.mime||"audio/mpeg"}));item.attempts=0;
     audio.src=item.url;audio.onended=()=>finish(item);audio.onerror=()=>retry(item);
-    watchdog=setTimeout(()=>finish(item,true),60000);document.getElementById("character").textContent=item.character||"";tryPlay(item);
+    watchdog=setTimeout(()=>finish(item,true),22000);document.getElementById("character").textContent=item.character||"";tryPlay(item);
   }catch{finish(item,true);}
 }
 async function ensurePcm(){
@@ -113,7 +114,7 @@ async function pollChunks(item){
 async function playStream(item){
   busy=true;current=item;item.streamSeq=0;item.scheduledEnd=0;item.streamFailed=false;
   document.getElementById("character").textContent=item.character||"";
-  try{await ensurePcm();pollChunks(item);watchdog=setTimeout(()=>finish(item,true),60000);}
+  try{await ensurePcm();pollChunks(item);watchdog=setTimeout(()=>finish(item,true),25000);}
   catch{finish(item,true);}
 }
 function playNext(){
@@ -127,6 +128,10 @@ async function poll(){
     const hb=await api("player/heartbeat",{player_id:playerId,boot_id:boot,busy,queue_size:queue.length,current_id:current?.id||null,finished_id:sentFinished,failed,pcm_streaming:true,...playbackChanges});
     playbackChanges={};if(sentFinished===finishedId){finishedId=null;failed=false;}
     active=hb.active;
+    if(hb.force_reset){
+      resetAudio();
+      status.textContent="LIVE • recovered audio";
+    }
     if(!active){resetAudio();status.textContent="مشغل آخر مسؤول عن صوت البث";return;}
     if(boot&&boot!==hb.boot_id){lastId=0;seen.clear();resetAudio();}
     if(epoch!==null&&epoch!==hb.epoch)resetAudio();epoch=hb.epoch;
@@ -137,7 +142,7 @@ async function poll(){
     if(data.boot_id!==boot||data.epoch!==epoch){resetAudio();return;}
     for(const row of data.events||[]){
       lastId=Math.max(lastId,row.id);
-      if(seen.has(row.id)){if(!current||current.id!==row.id)finishedId=row.id;continue;}
+      if(seen.has(row.id)){continue;}
       remember(row.id);
       if(row.stream||row.audio_b64)queue.push(row);
     }
