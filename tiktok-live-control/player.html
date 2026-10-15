@@ -1,101 +1,76 @@
 <!doctype html>
 <html lang="ar" dir="rtl">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Cyber LIVE Audio Player</title>
-<style>
-html,body{margin:0;width:100%;height:100%;background:transparent!important;overflow:hidden}
-#status{position:fixed;left:8px;bottom:8px;font:12px system-ui;color:rgba(255,255,255,.06);user-select:none}
-audio{width:1px;height:1px;opacity:.001;position:fixed;left:-10px;top:-10px}
-</style>
-</head>
-<body>
-<audio id="audio" autoplay playsinline preload="auto"></audio>
-<div id="status">Cyber Audio v2</div>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>LIVE Host Audio Player</title>
+<style>html,body{margin:0;width:100%;height:100%;background:transparent!important;overflow:hidden}#status{position:fixed;left:8px;bottom:8px;font:12px system-ui;color:rgba(255,255,255,.15)}audio{display:none}#controls{display:none;background:#131824;color:white;padding:12px;font:14px system-ui;border-radius:12px}#controls input{max-width:160px}button{padding:8px}</style></head>
+<body><audio id="audio" autoplay playsinline preload="auto"></audio><div id="status" role="status">جاري الاتصال…</div>
+<div id="controls"><button id="unlock">تفعيل الصوت</button><label>Volume <input id="volume" type="range" min="0" max="1" step=".05" value="1"></label><label><input id="mute" type="checkbox">Mute</label><span id="character"></span></div>
 <script>
-let lastId=0;
-let initialized=false;
-const queue=[];
-let busy=false;
-const audio=document.getElementById("audio");
-const status=document.getElementById("status");
-
-async function api(path, extra=""){
-  const r=await fetch("/api/backend?path="+encodeURIComponent(path)+(extra||""),{
-    cache:"no-store",
-    headers:{"cache-control":"no-cache"}
-  });
-  if(!r.ok) throw new Error("HTTP "+r.status);
-  return r.json();
+const audio=document.getElementById("audio"),status=document.getElementById("status");
+const params=new URLSearchParams(location.hash.slice(1));
+let capability=params.get("token")||sessionStorage.getItem("live-player-capability")||"";
+if(capability){sessionStorage.setItem("live-player-capability",capability);history.replaceState(null,"",location.pathname+location.search);}
+const playerId=crypto.randomUUID(),queue=[],seen=new Set();
+let busy=false,current=null,lastId=0,boot="",epoch=null,active=false,finishedId=null,failed=false,watchdog=null,retryTimer=null,playbackChanges={};
+if(new URLSearchParams(location.search).has("controls"))document.getElementById("controls").style.display="block";
+async function api(path,body=null,query={}){
+  const search=new URLSearchParams({path,...query});const headers={"cache-control":"no-cache"};if(capability)headers["x-player-token"]=capability;
+  const init={method:body===null?"GET":"POST",headers,cache:"no-store",signal:AbortSignal.timeout(4000)};if(body!==null){headers["content-type"]="application/json";init.body=JSON.stringify(body);}
+  const r=await fetch("/api/backend?"+search,init);if(!r.ok)throw new Error(r.status===401?"احصل على رابط المشغل من لوحة التحكم":"HTTP "+r.status);return r.json();
 }
-
-function b64ToBlobUrl(b64,mime){
-  const bin=atob(b64);
-  const bytes=new Uint8Array(bin.length);
-  for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
-  return URL.createObjectURL(new Blob([bytes],{type:mime||"audio/mpeg"}));
+function resetAudio(){
+  clearTimeout(retryTimer);clearTimeout(watchdog);queue.length=0;
+  if(current?.url)URL.revokeObjectURL(current.url);current=null;busy=false;
+  audio.onended=audio.onerror=null;audio.pause();audio.removeAttribute("src");audio.load();
 }
-
-function enqueue(b64,mime){
-  queue.push({b64,mime});
-  playNext();
+function remember(id){seen.add(id);while(seen.size>200)seen.delete(seen.values().next().value);try{sessionStorage.setItem("live-played",JSON.stringify({boot,ids:[...seen]}));}catch{}}
+function finish(item,error=false){
+  if(current!==item)return;clearTimeout(retryTimer);clearTimeout(watchdog);
+  audio.onended=audio.onerror=null;audio.pause();URL.revokeObjectURL(item.url);
+  finishedId=item.id;failed=error;current=null;busy=false;playNext();
 }
-
-async function tryPlay(url, attempt=0){
-  audio.src=url;
-  audio.muted=false;
-  audio.volume=1;
-  audio.load();
-  try{
-    await audio.play();
-    status.textContent="Cyber Audio • playing";
-  }catch(e){
-    if(attempt<12){
-      setTimeout(()=>tryPlay(url,attempt+1),500);
-    }else{
-      status.textContent="Cyber Audio • autoplay blocked";
-      finish(url);
-    }
-  }
+async function tryPlay(item){
+  if(current!==item||!active)return;
+  try{await audio.play();status.textContent="LIVE • playing • "+(item.character||"");}
+  catch{retry(item);}
 }
-
-function finish(url){
-  try{URL.revokeObjectURL(url)}catch{}
-  busy=false;
-  playNext();
+function retry(item){
+  if(current!==item||item.retryPending)return;
+  if(item.attempts>=3){status.textContent="تعذر تشغيل الصوت — فعّل التشغيل التلقائي";finish(item,true);return;}
+  item.attempts++;item.retryPending=true;
+  retryTimer=setTimeout(()=>{if(current!==item)return;item.retryPending=false;audio.load();tryPlay(item);},700*item.attempts);
 }
-
 function playNext(){
-  if(busy||!queue.length)return;
-  busy=true;
-  const item=queue.shift();
-  const url=b64ToBlobUrl(item.b64,item.mime);
-  audio.onended=()=>finish(url);
-  audio.onerror=()=>finish(url);
-  tryPlay(url,0);
+  if(busy||!active||!queue.length||audio.muted)return;
+  const item=queue.shift();busy=true;current=item;
+  try{
+    const binary=atob(item.audio_b64),bytes=Uint8Array.from(binary,c=>c.charCodeAt(0));item.audio_b64="";
+    item.url=URL.createObjectURL(new Blob([bytes],{type:item.mime||"audio/mpeg"}));item.attempts=0;
+    audio.src=item.url;audio.onended=()=>finish(item);audio.onerror=()=>retry(item);
+    watchdog=setTimeout(()=>finish(item,true),60000);document.getElementById("character").textContent=item.character||"";tryPlay(item);
+  }catch{finish(item,true);}
 }
-
 async function poll(){
   try{
-    const j=await api("events","&since="+lastId);
-    const rows=j.events||[];
-    if(!initialized){
-      for(const e of rows) lastId=Math.max(lastId,e.id||0);
-      initialized=true;
-      status.textContent="Cyber Audio • ready";
-      return;
-    }
-    for(const e of rows){
-      lastId=Math.max(lastId,e.id||0);
-      if(e.audio_b64)enqueue(e.audio_b64,e.mime);
-    }
-  }catch(e){
-    status.textContent="Cyber Audio • reconnecting";
-  }
+    const sentFinished=finishedId;
+    const hb=await api("player/heartbeat",{player_id:playerId,boot_id:boot,busy,queue_size:queue.length,current_id:current?.id||null,finished_id:sentFinished,failed,...playbackChanges});
+    playbackChanges={};
+    if(sentFinished===finishedId){finishedId=null;failed=false;}
+    active=hb.active;
+    if(!active){resetAudio();status.textContent="مشغل آخر مسؤول عن صوت البث";return;}
+    if(boot&&boot!==hb.boot_id){lastId=0;seen.clear();resetAudio();}
+    if(epoch!==null&&epoch!==hb.epoch)resetAudio();epoch=hb.epoch;
+    if(boot!==hb.boot_id){boot=hb.boot_id;try{const old=JSON.parse(sessionStorage.getItem("live-played")||"{}");if(old.boot===boot)(old.ids||[]).forEach(id=>seen.add(id));}catch{}}
+    audio.muted=!!hb.muted;audio.volume=Number(hb.volume??1);document.getElementById("volume").value=audio.volume;document.getElementById("mute").checked=audio.muted;
+    const data=await api("audio/events",null,{since:String(lastId),player_id:playerId});
+    if(data.boot_id!==boot||data.epoch!==epoch){resetAudio();return;}
+    for(const row of data.events||[]){lastId=Math.max(lastId,row.id);if(seen.has(row.id)){finishedId=row.id;continue;}remember(row.id);if(row.audio_b64)queue.push(row);}
+    if(!busy)status.textContent=hb.running?"LIVE • ready":"الوكيل متوقف";
+    playNext();
+  }catch(e){active=false;if(current){finishedId=current.id;failed=true;}resetAudio();status.textContent="LIVE • "+e.message;}
+  finally{setTimeout(poll,750);}
 }
-poll();
-setInterval(poll,650);
-</script>
-</body>
-</html>
+document.getElementById("unlock").onclick=()=>{if(current)tryPlay(current);else playNext();};
+document.getElementById("volume").oninput=e=>{audio.volume=Number(e.target.value);playbackChanges.volume=audio.volume;};
+document.getElementById("mute").onchange=e=>{audio.muted=e.target.checked;playbackChanges.muted=audio.muted;};
+window.addEventListener("beforeunload",resetAudio);poll();
+</script></body></html>

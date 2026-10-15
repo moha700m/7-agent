@@ -37,7 +37,7 @@ hr{border:0;border-top:1px solid var(--line);margin:15px 0}.modeInfo{margin-top:
     <button class="tab" data-tab="behavior">التصرف بالبث</button>
     <button class="tab" data-tab="events">الأحداث والجمل</button>
     <button class="tab" data-tab="providers">الذكاء والصوت</button>
-    <button class="tab" data-tab="live">السجل المباشر</button>
+    <button class="tab" data-tab="host">المضيف الذكي</button><button class="tab" data-tab="simulation">المحاكاة</button><button class="tab" data-tab="live">السجل المباشر</button>
   </div>
 
   <section id="connect" class="panel active">
@@ -68,6 +68,13 @@ hr{border:0;border-top:1px solid var(--line);margin:15px 0}.modeInfo{margin-top:
       <div class="stat"><b>الشخصية الحالية</b><span id="stCharacter">—</span></div>
       <div class="stat"><b>Voice</b><span id="stVoice">—</span></div>
     </div>
+    <div class="card"><div class="actions">
+      <button class="secondary" onclick="control('pause')">Pause Responses</button><button class="secondary" onclick="control('resume')">Resume</button>
+      <button id="muteButton" class="secondary" onclick="toggleMute()">Mute AI</button><button class="danger" onclick="control('clear_queue')">Clear Queue</button>
+      <button class="secondary" onclick="restartAgent()">Restart</button><button class="secondary" onclick="copyPlayerLink()">نسخ رابط مشغل LIVE</button>
+    </div><div class="grid" style="margin-top:12px"><div><label for="speak_text">Speak Now</label><input id="speak_text" placeholder="جملة تقولها الشخصية على البث"></div><div><label for="live_volume">LIVE volume</label><input id="live_volume" type="range" min="0" max="1" step=".05" value="1" onchange="control('volume',{volume:Number(this.value)})"></div></div>
+    <div class="actions"><button class="accent" onclick="control('speak',{text:val('speak_text')})">Speak Now</button></div><div id="playerLink" class="hint" style="overflow-wrap:anywhere"></div><p class="hint">صوت LIVE من player.html فقط. افتح رابط المشغل في TikTok LIVE Studio. معاينة الصوت متاحة في تبويب الذكاء والصوت.</p></div>
+    <div id="advancedStats" class="card statusGrid"></div>
     <div class="card">
       <div class="title">الإعداد المقترح للبث</div>
       <div class="research">
@@ -79,9 +86,42 @@ hr{border:0;border-top:1px solid var(--line);margin:15px 0}.modeInfo{margin-top:
     </div>
   </section>
 
+  <section id="host" class="panel">
+    <div class="card"><div class="title">إدارة المضيف أثناء البث</div>
+      <div class="grid3">
+        <div><label for="personality_mode">Mode</label><select id="personality_mode"><option value="manual">Manual</option><option value="auto">Auto Personality</option></select></div>
+        <div><label for="topic_profile">Current Topic / Game Profile</label><select id="topic_profile"></select></div>
+        <div><label for="mood_override">Force Mood</label><select id="mood_override"><option value="auto">Auto</option></select></div>
+        <div><label for="persona_min_duration">أقل مدة للشخصية بالثواني</label><input id="persona_min_duration" type="number" min="600" max="3600" value="900"></div>
+        <div><label for="idle_threshold">فترة الهدوء قبل المبادرة</label><input id="idle_threshold" type="number" min="45" max="300" value="75"></div>
+        <div><label for="max_proactive_per_10min">أقصى جمل مبادرة / 10 دقائق</label><input id="max_proactive_per_10min" type="number" min="0" max="8" value="3"></div>
+        <div><label for="memory_ttl_hours">TTL الذاكرة بالساعات</label><input id="memory_ttl_hours" type="number" min="6" max="24" value="12"></div>
+        <label class="toggle"><input id="proactive_enabled" type="checkbox"> Proactive Host</label>
+        <label class="toggle"><input id="crowd_enabled" type="checkbox" checked> Auto Crowd Mode</label>
+        <label class="toggle"><input id="allow_profile_persona" type="checkbox"> السماح للملف بتغيير الشخصية في Manual</label>
+      </div>
+      <div class="actions"><button class="accent" onclick="applyHost()">تطبيق الإعدادات فورًا</button><button class="secondary" onclick="forceCharacter()">Force Character — الشخصية المختارة</button></div>
+      <p class="hint">المبادرة تحتاج مشغلًا متصلًا وخاملًا. تبديل الشخصية يوقف المقاطع القديمة ويُبقي اتصال TikTok قائمًا.</p>
+    </div>
+    <div class="card"><div class="title">Failover</div><div class="grid">
+      <div><label for="secondary_model">Secondary AI model</label><input id="secondary_model" value="openai/gpt-4o-mini"></div>
+      <div><label for="third_model">Third AI model</label><input id="third_model" value="meta-llama/llama-3.3-70b-instruct"></div>
+      <div><label for="tts_provider">Primary TTS</label><select id="tts_provider"><option value="openrouter">OpenRouter</option><option value="vibi">Vibi / ElevenLabs</option></select></div>
+      <div><label for="tts_fallback">Fallback TTS</label><select id="tts_fallback"><option value="vibi">Vibi / ElevenLabs</option><option value="openrouter">OpenRouter</option><option value="none">بدون</option></select></div>
+    </div><p class="hint">الاحتياطي يحتاج مفتاحه وصوتًا مناسبًا. لصوت أنثى احتياطي Vibi، اضبط VIBI_FEMALE_VOICE_ID على Render.</p></div>
+    <div class="card"><div class="title">صحة الخدمات</div><pre id="healthDetails" style="direction:ltr;white-space:pre-wrap;overflow:auto">جار الفحص…</pre></div>
+    <div class="card"><div class="title">Session Metrics</div><div id="sessionMetrics" class="grid3"></div><div class="actions"><button class="secondary" onclick="resetMetrics()">Reset session stats</button></div></div>
+  </section>
+  <section id="simulation" class="panel"><div class="card">
+    <div class="title">Simulation — نفس مسار البث بدون TikTok</div>
+    <div class="grid"><label class="toggle"><input id="fixture" type="checkbox"> اختبار دون مزودات: رد ثابت وصوت صامت</label><div class="actions"><button class="accent" onclick="startSimulation()">بدء المحاكاة</button><button class="danger" onclick="stopAgent()">إيقاف المحاكاة</button></div>
+    <div><label for="sim_user">Username</label><input id="sim_user" value="test_viewer"></div><div><label for="sim_text">التعليق</label><input id="sim_text" value="سايبر وش تلعب؟"></div>
+    <div><label for="sim_gift_value">قيمة الهدية Diamonds</label><input id="sim_gift_value" type="number" min="0" value="100"></div></div>
+    <div class="actions" id="simulationButtons"></div><p id="simResult" class="hint">ابدأ المحاكاة والوكيل متوقف. في الوضع العادي تُستخدم مفاتيحك لتوليد AI وTTS حقيقيين.</p>
+  </div></section>
   <section id="persona" class="panel">
     <div class="card">
-      <div class="title">هوية الشخصية</div>
+      <div class="title">هوية الشخصية</div><div class="actions"><button class="accent" onclick="saveCustomPreset()">Save Custom Preset</button><button class="secondary" onclick="deleteCustomPreset()">حذف النسخة المحلية المختارة</button></div>
       <div class="grid">
         <div><label>اسم الشخصية</label><input id="name" value="سايبر"></div>
         <div><label>اسم صاحب البث</label><input id="owner_name" placeholder="اختياري"></div>
@@ -187,7 +227,7 @@ hr{border:0;border-top:1px solid var(--line);margin:15px 0}.modeInfo{margin-top:
 
 <script>
 const $=id=>document.getElementById(id);
-let lastId=0, audioQueue=[], playing=false;
+let lastId=0, audioQueue=[], playing=false, eventBoot="";
 let CHARACTER_PRESETS={};
 
 document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{
@@ -205,14 +245,15 @@ function num(id){return Number($(id).value)}
 function payload(){
   return {
     tiktok:val("tiktok"),
-    preset_id:val("broadcast_mode")||"cyber_gamer",
+    preset_id:CHARACTER_PRESETS[val("broadcast_mode")]?.base_id||val("broadcast_mode")||"cyber_gamer",
+    ...hostPayload(),
     model:val("model"),
     openrouter_key:val("openrouter_key"),
     vibi_key:val("vibi_key"),
     voice_id:val("voice_id"),
     tts_voice:val("tts_voice"),
     tts_model:val("tts_model"),
-    tts_provider:"openrouter",
+    tts_provider:val("tts_provider"),
     vibi_model:val("vibi_model"),
     voice_language:val("voice_language"),
     voice_stability:num("voice_stability"),
@@ -253,7 +294,7 @@ function applyPresetFields(p){
 async function loadCharacterPresets(){
   try{
     const j=await api("presets");
-    const list=j.presets||[];
+    const list=[...(j.presets||[]),...readCustomPresets()];
     CHARACTER_PRESETS=Object.fromEntries(list.map(p=>[p.id,p]));
     const select=$("broadcast_mode");
     select.innerHTML=list.map(p=>"<option value=\""+esc(p.id)+"\">"+esc(p.label)+" — "+esc(p.voice_gender||"")+"</option>").join("");
@@ -283,6 +324,7 @@ async function changeBroadcastMode(){
     const j=await api("configure","POST",payload());
     $("stCharacter").textContent=j.character||p.persona?.name||"—";
     $("stVoice").textContent=(j.voice||p.voice)+" · "+(j.voice_gender||p.voice_gender||"");
+    loadSecretStatus();
     addLog("تفعلت الشخصية والصوت مباشرة"+(j.running?" أثناء البث":" وجاهزة للتشغيل"));
   }catch(e){
     addLog("تم تغيير الواجهة، وتعذر تحديث الباكند الآن: "+e.message,"error");
@@ -300,7 +342,7 @@ function addLog(msg,kind="status"){
   const d=document.createElement("div");
   d.className="row "+(kind==="ai"?"ai":kind==="gift"?"gift":kind==="error"?"error":"statusline");
   d.innerHTML="<small>"+new Date().toLocaleTimeString("ar-SA")+"</small>"+esc(msg);
-  $("log").appendChild(d); $("log").scrollTop=$("log").scrollHeight;
+  $("log").appendChild(d); while($("log").children.length>300)$("log").firstChild.remove(); $("log").scrollTop=$("log").scrollHeight;
 }
 function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]))}
 function queueAudio(b64,mime){audioQueue.push({b64,mime});playNext()}
@@ -317,6 +359,7 @@ async function testAll(){
     const j=await api("test","POST",payload());
     $("stOR").textContent=j.openrouter.message;$("stOR").className=j.openrouter.ok?"ok":"bad";
     $("stVibi").textContent=(j.tts&&j.tts.message)||j.vibi.message;$("stVibi").className=(j.tts&&j.tts.ok)?"ok":"bad";
+    renderHostStatus(j);
     $("stTikTok").textContent=j.tiktok.message;$("stTikTok").className=j.tiktok.ok?"ok":"bad";
     addLog(j.ok?"كل الاتصالات ناجحة ✓":"فيه اتصال يحتاج تعديل",j.ok?"status":"error");
     loadSecretStatus();
@@ -333,6 +376,7 @@ async function previewVoice(){
 async function pollStatus(){
   try{
     const j=await api("status");
+    renderHostStatus(j);
     $("stTikTok").textContent=j.tiktok||"—";$("stTikTok").className=j.tiktok==="LIVE"?"ok":j.tiktok==="ERROR"?"bad":"warn";
     $("stRoom").textContent=j.room_id||"—";
     $("stCharacter").textContent=j.agent_name||j.preset_label||"—";
@@ -344,11 +388,13 @@ async function pollStatus(){
 async function pollEvents(){
   try{
     const j=await api("events","GET",null,"&since="+lastId);
-    for(const e of (j.events||[])){lastId=Math.max(lastId,e.id||0);addLog(e.message,e.kind)}
+    if(eventBoot && eventBoot!==j.boot_id)lastId=0;
+    eventBoot=j.boot_id;
+    for(const e of (j.events||[])){lastId=Math.max(lastId,e.id||0);if(e.kind==="inspector")renderInspector(e);else addLog(e.message,e.kind)}
   }catch{}
 }
 function saveSettings(silent=false){
-  const data={};[...personaIds,...behaviorIds,...connIds].forEach(id=>data[id]=val(id));
+  const data={};[...personaIds,...behaviorIds,...connIds,...hostIds].forEach(id=>data[id]=val(id));
   localStorage.setItem("cyber-live-settings-v4",JSON.stringify(data));
   if(!silent)addLog("تم حفظ كل الإعدادات على هذا الجهاز");
 }
@@ -363,23 +409,29 @@ async function loadSecretStatus(){
   try{
     const j=await api("secret_status");
     if(j.openrouter_saved){
+      $("openrouter_key").value="";
       $("openrouter_key").placeholder="محفوظ بأمان — اتركه فارغ";
       $("orSecretNote").textContent="مفتاح OpenRouter محفوظ ومشفّر على هذا المتصفح.";
     }
     if(j.vibi_saved){
+      $("vibi_key").value="";
       $("vibi_key").placeholder="محفوظ بأمان — اتركه فارغ";
       $("vibiSecretNote").textContent="مفتاح Vibi محفوظ ومشفّر على هذا المتصفح.";
     }
   }catch{}
 }
 function resetSettings(){localStorage.removeItem("cyber-live-settings-v4");localStorage.removeItem("cyber-live-settings-v3");location.reload()}
+</script>
+<script src="host.js"></script>
+<script>
 loadSettings();
-[...personaIds,...behaviorIds,...connIds].forEach(id=>{
+[...personaIds,...behaviorIds,...connIds,...hostIds].forEach(id=>{
   if(id==="broadcast_mode")return;
   const e=$(id); if(!e)return;
   e.addEventListener(e.type==="checkbox"?"change":"input",()=>saveSettings(true));
 });
-loadCharacterPresets();pollStatus();pollEvents();loadSecretStatus();setInterval(pollStatus,2500);setInterval(pollEvents,1400);
+document.querySelectorAll("label").forEach(l=>{const next=l.nextElementSibling;if(next?.id)l.htmlFor=next.id;});
+loadHostOptions();loadCharacterPresets();pollStatus();pollEvents();loadSecretStatus();setInterval(pollStatus,2500);setInterval(pollEvents,1400);
 </script>
 </body>
 </html>

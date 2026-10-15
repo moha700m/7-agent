@@ -56,7 +56,8 @@ function saveSecretCookie(res, secrets, secret) {
 }
 
 module.exports = async function handler(req, res) {
-  const allowed = new Set(["status","events","test","start","stop","preview","configure","presets","secret_status"]);
+  const allowed = new Set(["status","events","test","start","stop","restart","preview","configure","presets","secret_status","health/details","metrics","metrics/reset","profiles","control","simulation/start","simulate","audio/events","player/heartbeat","player_token"]);
+  res.setHeader("Cache-Control", "no-store");
   const path = String(req.query.path || "");
   if (!allowed.has(path)) return res.status(400).json({ error: "مسار غير مسموح" });
 
@@ -64,6 +65,16 @@ module.exports = async function handler(req, res) {
   const token = process.env.CONTROL_TOKEN;
   if (!base || !token) return res.status(503).json({ error: "إعدادات الربط غير مكتملة" });
 
+  const readPaths = new Set(["status","events","presets","secret_status","health/details","metrics","profiles","audio/events","player_token"]);
+  if ((readPaths.has(path) && req.method !== "GET") || (!readPaths.has(path) && req.method !== "POST")) {
+    return res.status(405).json({error:"طريقة غير مسموحة"});
+  }
+  if (req.method === "POST") {
+    const origin = req.headers.origin;
+    const expectedHost = req.headers["x-forwarded-host"] || req.headers.host;
+    try {if (origin && new URL(origin).host !== expectedHost) return res.status(403).json({error:"مصدر الطلب غير مسموح"});} catch {return res.status(403).json({error:"مصدر الطلب غير صالح"});}
+    if (req.headers["sec-fetch-site"] === "cross-site") return res.status(403).json({error:"مصدر الطلب غير مسموح"});
+  }
   const cookies = parseCookies(req);
   let savedSecrets = decryptSecrets(cookies.cyber_secrets, token);
 
@@ -74,10 +85,50 @@ module.exports = async function handler(req, res) {
     });
   }
 
+  const sign = value => crypto.createHmac("sha256", token).update(value).digest("base64url");
+  const playerCapability = String(req.headers["x-player-token"] || "");
+  const [playerPayload, playerSignature] = playerCapability.split(".");
+  let playerAllowed = false;
+  try {
+    const expected = sign("player:" + playerPayload);
+    const claims = JSON.parse(Buffer.from(playerPayload, "base64url").toString());
+    playerAllowed = playerSignature && playerSignature.length === expected.length && crypto.timingSafeEqual(Buffer.from(playerSignature),Buffer.from(expected)) && claims.exp > Date.now();
+  } catch {}
+  const playerPaths = new Set(["audio/events","player/heartbeat"]);
+  const incoming = req.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {};
+  const candidate = typeof incoming.openrouter_key === "string" ? incoming.openrouter_key.trim() : "";
+  let operator = !!savedSecrets.openrouter_key;
+  if ((req.method === "POST" || path === "player_token" || playerPaths.has(path)) && !(playerPaths.has(path) && playerAllowed)) {
+    const key = candidate || savedSecrets.openrouter_key;
+    if (!key) return res.status(401).json({error:"اختبر مفتاح OpenRouter أو احفظه لفتح أدوات التحكم"});
+    const pinnedHash = process.env.OPERATOR_KEY_SHA256;
+    if (pinnedHash) {
+      const digest=crypto.createHash("sha256").update(key).digest("hex");
+      if (digest!==pinnedHash.toLowerCase()) return res.status(403).json({error:"هذا المفتاح غير مخول للتحكم بهذه اللوحة"});
+    }
+    // Validate the operator credential before issuing a trusted encrypted cookie.
+    if (candidate || !savedSecrets.validated_at || Date.now()-savedSecrets.validated_at > 28800000) {
+      try {
+        const check = await fetch("https://openrouter.ai/api/v1/key", {headers:{Authorization:"Bearer " + key},signal:AbortSignal.timeout(12000)});
+        if (!check.ok) return res.status(401).json({error:"تعذر التحقق من مفتاح OpenRouter"});
+        savedSecrets.openrouter_key = key;
+        savedSecrets.validated_at = Date.now();
+        saveSecretCookie(res, savedSecrets, token);
+      } catch {return res.status(502).json({error:"تعذر التحقق من صلاحية التحكم الآن"});}
+    }
+    operator = true;
+  }
+  if (path === "player_token") {
+    if (!operator) return res.status(401).json({error:"احفظ مفتاحك أولًا"});
+    const claims = Buffer.from(JSON.stringify({exp:Date.now()+30*86400000,nonce:crypto.randomBytes(12).toString("hex")})).toString("base64url");
+    return res.status(200).json({token:claims+"."+sign("player:"+claims),expires_days:30});
+  }
   const target = new URL("/api/" + path, base);
-  if (path === "events" && req.query.since) target.searchParams.set("since", String(req.query.since));
+  if (["events","audio/events"].includes(path)) {
+    for (const key of ["since","initialize","player_id"]) if (req.query[key] !== undefined) target.searchParams.set(key,String(req.query[key]));
+  }
 
-  const headers = { "X-Control-Token": token };
+  const headers = { "X-Control-Token": token, "X-Operator-Id": crypto.createHash("sha256").update(savedSecrets.openrouter_key || "player").digest("hex").slice(0,24) };
   const init = { method: req.method || "GET", headers };
 
   if (!["GET","HEAD"].includes(init.method)) {
@@ -101,6 +152,7 @@ module.exports = async function handler(req, res) {
   }
 
   try {
+    init.signal = AbortSignal.timeout(55000);
     const upstream = await fetch(target, init);
     const text = await upstream.text();
     res.status(upstream.status);
