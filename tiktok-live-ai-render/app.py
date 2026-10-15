@@ -6,7 +6,7 @@ import asyncio
 import threading
 from flask import Flask, jsonify, request, Response
 from TikTokLive import TikTokLiveClient
-from TikTokLive.events import ConnectEvent, DisconnectEvent, CommentEvent, JoinEvent, GiftEvent, FollowEvent, LikeEvent
+from TikTokLive.events import ConnectEvent, DisconnectEvent, CommentEvent, JoinEvent, GiftEvent, FollowEvent, LikeEvent, ShareEvent
 
 app = Flask(__name__)
 
@@ -37,8 +37,16 @@ class RaceGame:
         self.events = 0
         self.client = None
         self.client_loop = None
+        self.last_tiktok_event = ""
+        self.last_tiktok_event_at = 0.0
         threading.Thread(target=self._game_loop, daemon=True).start()
         threading.Thread(target=self._tiktok_loop, daemon=True).start()
+
+    def _record_tiktok_event(self, kind, username="", extra=""):
+        with self.lock:
+            self.last_tiktok_event = str(kind)
+            self.last_tiktok_event_at = time.time()
+        print(f"RACE_EVENT {kind} user={username} {extra}".strip(), flush=True)
 
     def _player(self, username, name):
         rng = random.Random(f"{username}:{self.round}")
@@ -175,7 +183,8 @@ class RaceGame:
                 phase=self.phase, round=self.round, remaining=remaining,
                 players=players, player_count=len(players), waiting_next=len(self.waiting_next),
                 winners=self.winners, leaderboard=leaders, max_players=MAX_PLAYERS,
-                last_error=self.last_error, reconnects=self.reconnects, events=self.events
+                last_error=self.last_error, reconnects=self.reconnects, events=self.events,
+                last_tiktok_event=self.last_tiktok_event, last_tiktok_event_at=self.last_tiktok_event_at
             )
 
     def demo(self, count=8):
@@ -220,27 +229,39 @@ class RaceGame:
                 @client.on(JoinEvent)
                 async def on_join(event):
                     username, name = who(event)
+                    self._record_tiktok_event("JOIN", username)
                     self.join(username, name)
 
                 @client.on(CommentEvent)
                 async def on_comment(event):
                     username, name = who(event)
-                    text = str(getattr(event, "comment", "") or "").strip().lower()
-                    if text in {"دخول","ادخل","العب","لعب","join","play"}:
-                        self.join(username, name)
+                    text = str(getattr(event, "comment", "") or "").strip()
+                    self._record_tiktok_event("COMMENT", username, f"text={text[:40]}")
+                    # Any comment is enough to enter the race. This is much more reliable
+                    # than depending only on JoinEvent, which TikTok may omit for viewers.
+                    self.join(username, name)
 
                 @client.on(FollowEvent)
                 async def on_follow(event):
                     username, name = who(event)
+                    self._record_tiktok_event("FOLLOW", username)
                     self.join(username, name)
                     self.boost(username, .10)
 
                 @client.on(LikeEvent)
                 async def on_like(event):
                     username, name = who(event)
-                    self.join(username, name)
                     count = max(1, int(getattr(event, "count", 1) or 1))
+                    self._record_tiktok_event("LIKE", username, f"count={count}")
+                    self.join(username, name)
                     self.boost(username, min(.05, count * .002))
+
+                @client.on(ShareEvent)
+                async def on_share(event):
+                    username, name = who(event)
+                    self._record_tiktok_event("SHARE", username)
+                    self.join(username, name)
+                    self.boost(username, .06)
 
                 @client.on(GiftEvent)
                 async def on_gift(event):
@@ -248,8 +269,9 @@ class RaceGame:
                     if getattr(gift, "streakable", False) and getattr(event, "streaking", False):
                         return
                     username, name = who(event)
-                    self.join(username, name)
                     count = max(1, int(getattr(event, "repeat_count", 1) or 1))
+                    self._record_tiktok_event("GIFT", username, f"count={count}")
+                    self.join(username, name)
                     diamonds = max(0, int(getattr(gift, "diamond_count", 0) or 0)) * count
                     self.boost(username, min(.22, .04 + math.log10(max(1, diamonds)) * .05))
 
