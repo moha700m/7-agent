@@ -95,7 +95,7 @@ class SemanticDeduplicator:
 
 
 class PriorityEngine:
-    BASE = dict(gift=850, comment=400, follow=500, share=420, join=180, like=80, proactive=40, manual=980)
+    BASE = dict(gift=850, comment=400, follow=500, share=420, join=320, like=80, proactive=40, manual=980)
 
     def score(self, event, state=None):
         state = state or {}
