@@ -68,16 +68,29 @@ class RaceGame:
             return
         with self.lock:
             self.events += 1
+
+            # Recover automatically from an impossible empty active/finished round.
+            # This prevents TikTok events from being queued forever while the UI stays 0/24.
+            if not self.players and self.phase not in ("waiting", "countdown"):
+                self.phase = "waiting"
+                self.phase_started = time.time()
+                self.winners = []
+
             if username in self.players:
+                print(f"RACE_JOIN existing user={username} phase={self.phase} players={len(self.players)} queued={len(self.waiting_next)}", flush=True)
                 return
             if username in self.waiting_next:
+                print(f"RACE_JOIN queued_existing user={username} phase={self.phase} players={len(self.players)} queued={len(self.waiting_next)}", flush=True)
                 return
+
             if self.phase in ("waiting", "countdown") and len(self.players) < MAX_PLAYERS:
                 if not self.players:
                     self.phase_started = time.time()
                 self.players[username] = self._player(username, name)
+                print(f"RACE_JOIN added user={username} phase={self.phase} players={len(self.players)} queued={len(self.waiting_next)}", flush=True)
             else:
                 self.waiting_next[username] = (str(name or username).strip()[:24] or username)
+                print(f"RACE_JOIN queued user={username} phase={self.phase} players={len(self.players)} queued={len(self.waiting_next)}", flush=True)
 
     def boost(self, username, amount):
         with self.lock:
