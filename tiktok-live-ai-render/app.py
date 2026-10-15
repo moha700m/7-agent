@@ -254,7 +254,7 @@ class RaceGame:
                     self.boost(username, min(.22, .04 + math.log10(max(1, diamonds)) * .05))
 
                 async def connect():
-                    task = await client.start(process_connect_events=False)
+                    task = await client.start(process_connect_events=True)
                     await task
 
                 loop.run_until_complete(connect())
