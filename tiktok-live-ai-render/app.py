@@ -4,6 +4,7 @@ import time
 import random
 import asyncio
 import threading
+import requests
 from flask import Flask, jsonify, request, Response
 from TikTokLive import TikTokLiveClient
 from TikTokLive.events import ConnectEvent, DisconnectEvent, CommentEvent, JoinEvent, GiftEvent, FollowEvent, LikeEvent, ShareEvent
