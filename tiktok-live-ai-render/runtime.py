@@ -273,17 +273,28 @@ class HostRuntime:
                     self.skip(old,"expired while audio busy","EXPIRED")
                 if self.paused or self.muted:
                     continue
-                if self.pending_audio and time.time()-self.pending_audio[1] > 35:
-                    self.metrics.inc("audio_failed")
-                    stale_id=self.pending_audio[0]
-                    self.audio_streams.pop(stale_id,None)
-                    self.audio=deque((row for row in self.audio if row["id"]!=stale_id),maxlen=12)
-                    self.pending_audio=None
-                    self.audio_epoch+=1
-                    self.player["busy"]=False
-                    self.player["current_id"]=None
-                    self.player["current_since"]=0
-                    self.publish("error","تم إسقاط مقطع صوت عالق واستكمال الطابور",audio_id=stale_id)
+                if self.pending_audio:
+                    pending_id=self.pending_audio[0]
+                    session=self.audio_streams.get(pending_id)
+                    # Streaming playback is bounded by the actual PCM duration. If the browser
+                    # never acknowledges finish (WebAudio/autoplay edge case), release it shortly
+                    # after the speech should have ended and bump epoch so the player cuts stale audio.
+                    stream_deadline=0
+                    if session and session.get("done") and session.get("published_at") and session.get("duration_sec"):
+                        stream_deadline=session["published_at"]+session["duration_sec"]+2.5
+                    stale_by_duration=bool(stream_deadline and time.time()>stream_deadline)
+                    stale_by_absolute=time.time()-self.pending_audio[1] > 35
+                    if stale_by_duration or stale_by_absolute:
+                        self.metrics.inc("audio_failed")
+                        stale_id=self.pending_audio[0]
+                        self.audio_streams.pop(stale_id,None)
+                        self.audio=deque((row for row in self.audio if row["id"]!=stale_id),maxlen=12)
+                        self.pending_audio=None
+                        self.audio_epoch+=1
+                        self.player["busy"]=False
+                        self.player["current_id"]=None
+                        self.player["current_since"]=0
+                        self.publish("error","تم تحرير مقطع صوت بعد مدة النطق المتوقعة واستكمال الطابور",audio_id=stale_id)
                 # Only generate one outstanding clip; the player is the sole audio sink.
                 if self.pending_audio or self.player["busy"] and time.time()-self.player["heartbeat"]<10:
                     continue
@@ -361,7 +372,7 @@ class HostRuntime:
                             voice=cfg["tts_voice"],voice_style=cfg["voice_style"],streaming=True)
                         audio_id=row["id"]
                         self.audio_streams[audio_id]=dict(id=audio_id,seq=0,chunks=deque(maxlen=300),done=False,failed=False,
-                            created_at=time.time(),sample_rate=24000,published=False)
+                            created_at=time.time(),sample_rate=24000,published=False,published_at=0,duration_sec=0)
                         self.pending_audio=(audio_id,time.time())
                     def on_chunk(raw):
                         with self.lock:
@@ -373,15 +384,18 @@ class HostRuntime:
                             session["chunks"].append(dict(seq=session["seq"],audio_b64=base64.b64encode(raw).decode()))
                             if not session["published"]:
                                 session["published"]=True
-                                event["timings"]["audio_ready"]=time.time()
+                                session["published_at"]=time.time()
+                                event["timings"]["audio_ready"]=session["published_at"]
                                 self.audio.append(dict(id=audio_id,created_at=time.time(),audio_b64="",mime="audio/pcm",
                                     character=cfg["persona"]["name"],epoch=self.audio_epoch,event_type=event["type"],
                                     stream=True,sample_rate=24000))
                     try:
-                        self.providers.speak_streaming(reply,cfg,on_chunk)
+                        meta=self.providers.speak_streaming(reply,cfg,on_chunk)
                         with self.lock:
                             session=self.audio_streams.get(audio_id)
-                            if session: session["done"]=True
+                            if session:
+                                session["done"]=True
+                                session["duration_sec"]=max(.1,float(meta.get("bytes",0))/(24000*2))
                         streamed=True
                     except Exception:
                         with self.lock:
