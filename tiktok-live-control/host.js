@@ -1,6 +1,7 @@
 /* Dashboard extensions. LIVE audio is intentionally absent from this file. */
 const hostIds=["personality_mode","topic_profile","mood_override","persona_min_duration","idle_threshold","max_proactive_per_10min","memory_ttl_hours","proactive_enabled","crowd_enabled","allow_profile_persona","secondary_model","third_model","tts_provider","tts_fallback",
-"self_host_enabled","self_host_mode","self_host_activity","self_host_idle_before_start","self_host_min_gap","self_host_max_gap","self_host_max_consecutive","self_host_banter_level","self_host_question_frequency","self_host_topic_repeat_cooldown","self_host_topic_timeout","self_host_allow_stories","self_host_allow_debates","self_host_allow_banter","self_host_allow_challenges","self_host_allow_polls"];
+"self_host_enabled","self_host_mode","self_host_activity","self_host_idle_before_start","self_host_min_gap","self_host_max_gap","self_host_max_consecutive","self_host_banter_level","self_host_question_frequency","self_host_topic_repeat_cooldown","self_host_topic_timeout","self_host_allow_stories","self_host_allow_debates","self_host_allow_banter","self_host_allow_challenges","self_host_allow_polls",
+"race_commentator_enabled","race_commentator_explain","race_commentator_min_gap","race_commentator_hype"];
 let currentStatus={},TOPIC_PROFILES={};
 const statFields={mood:"Current Mood",crowd_state:"Crowd State",queue_size:"Queue Size",current_ai_model:"AI Model",current_tts_provider:"TTS Provider",latency:"Latency",comments_per_min:"Comments/min",gifts_per_min:"Gifts/min",replies_per_min:"Replies/min",suppressed_spam:"Suppressed spam",deduped_messages:"Deduped messages",reconnect_attempts:"Reconnect attempts",player_connected:"Player",paused:"Responses",last_error:"Last error"};
 $("advancedStats").innerHTML=Object.entries(statFields).map(([key,label])=>'<div class="stat"><b>'+esc(label)+'</b><span id="host_'+key+'">—</span></div>').join("");
@@ -46,6 +47,30 @@ if(hostPanel){
     </div>
     <p class="hint">أي تعليق أو متابعة أو هدية أو مشاركة حقيقية تأخذ الأولوية على السوالف التلقائية.</p>
   </div>`);
+
+  const selfHostCard=document.getElementById("selfHostCard")||first;
+  selfHostCard.insertAdjacentHTML("afterend",`
+  <div class="card" id="raceCommentatorCard">
+    <div class="title">🎙️ معلّق سباق الجمهور — صوت واحد</div>
+    <div class="grid3">
+      <label class="toggle"><input id="race_commentator_enabled" type="checkbox" checked> تشغيل المعلّق الذكي</label>
+      <label class="toggle"><input id="race_commentator_explain" type="checkbox" checked> يشرح اللعبة والقوانين</label>
+      <div><label>أقل فاصل بين التعليقات — ثانية</label><input id="race_commentator_min_gap" type="number" min="4" max="30" value="8"></div>
+      <div><label>مستوى الحماس 0–10</label><input id="race_commentator_hype" type="number" min="0" max="10" value="7"></div>
+      <div class="stat"><b>اتصال السباق</b><span id="rc_state">—</span></div>
+      <div class="stat"><b>الجولة / الحالة</b><span id="rc_phase">—</span></div>
+      <div class="stat"><b>المتسابقون</b><span id="rc_players">0</span></div>
+      <div class="stat"><b>المتصدر</b><span id="rc_leader">—</span></div>
+      <div class="stat"><b>التعليق القادم</b><span id="rc_next">—</span></div>
+      <div class="stat"><b>آخر حدث علّق عليه</b><span id="rc_last">—</span></div>
+    </div>
+    <div class="actions">
+      <button class="accent" onclick="applyRaceCommentator()">تفعيل المعلّق</button>
+      <button class="secondary" onclick="raceCommentatorSpeakNow()">علّق الآن</button>
+    </div>
+    <p class="hint">يقرأ بيانات سباق الجمهور من السيرفر مباشرة. يستخدم نفس الشخصية والصوت المختار حاليًا، والتعليقات والهدايا الحقيقية لها الأولوية. عند تشغيله تتوقف السوالف التلقائية حتى يبقى عندك صوت واحد فقط.</p>
+    <div id="rc_error" class="hint"></div>
+  </div>`);
 }
 function hostPayload(){
   const out={};
@@ -76,6 +101,14 @@ function renderHostStatus(j){
   if($("sh_participants"))$("sh_participants").textContent=j.topic_participants??0;
   if($("sh_next"))$("sh_next").textContent=(j.next_self_host_in??0)+"s";
   if($("sh_last"))$("sh_last").textContent=j.last_self_host_line||"—";
+
+  if($("rc_state"))$("rc_state").textContent=j.race_commentator_connected?"متصل بالسباق":(j.race_commentator_enabled?"جاري الاتصال":"متوقف");
+  if($("rc_phase"))$("rc_phase").textContent=(j.race_commentator_round&&j.race_commentator_round!=="—"?"جولة "+j.race_commentator_round+" · ":"")+(j.race_commentator_phase||"—");
+  if($("rc_players"))$("rc_players").textContent=j.race_commentator_players??0;
+  if($("rc_leader"))$("rc_leader").textContent=j.race_commentator_leader||"—";
+  if($("rc_next"))$("rc_next").textContent=(j.race_commentator_next_in??0)+"s";
+  if($("rc_last"))$("rc_last").textContent=j.race_commentator_last_event||"—";
+  if($("rc_error"))$("rc_error").textContent=j.race_commentator_last_error?"آخر خطأ: "+j.race_commentator_last_error:"المصدر: "+(j.race_commentator_source||"سباق الجمهور");
   const metrics=$("sessionMetrics");metrics.replaceChildren();
   for(const [key,value] of Object.entries(m)){
     if(key.endsWith("_per_min"))continue;
@@ -100,6 +133,32 @@ async function applySelfHost(){
 }
 async function selfHostAction(action){
   try{await api("self-host/"+action,"POST",{});addLog("Self Host: "+action);pollStatus();}
+  catch(e){addLog(e.message,"error");}
+}
+function raceCommentatorPayload(){
+  return {
+    race_commentator_enabled:!!$("race_commentator_enabled")?.checked,
+    race_commentator_explain:!!$("race_commentator_explain")?.checked,
+    race_commentator_min_gap:Number($("race_commentator_min_gap")?.value||8),
+    race_commentator_hype:Number($("race_commentator_hype")?.value||7)
+  };
+}
+async function applyRaceCommentator(){
+  saveSettings(true);
+  const data=raceCommentatorPayload();
+  if(data.race_commentator_enabled){
+    setField("self_host_enabled",false);
+    setField("proactive_enabled",false);
+  }
+  try{
+    const j=await api("commentator/configure","POST",data);
+    renderHostStatus(j);
+    addLog(data.race_commentator_enabled?"تم تشغيل معلّق السباق بنفس الصوت الحالي":"تم إيقاف معلّق السباق");
+    saveSettings(true);
+  }catch(e){addLog("تعذر تطبيق المعلّق: "+e.message,"error");}
+}
+async function raceCommentatorSpeakNow(){
+  try{await api("commentator/speak-now","POST",{});addLog("طلبت من المعلّق تعليقًا فوريًا");pollStatus();}
   catch(e){addLog(e.message,"error");}
 }
 async function forceCharacter(){setField("personality_mode","manual");await changeBroadcastMode();}
