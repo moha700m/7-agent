@@ -16,7 +16,9 @@ class MetricsManager:
                 "comments_received", "comments_answered", "comments_skipped", "joins_received",
                 "joins_spoken", "gifts_received", "gifts_spoken", "follows", "follows_spoken", "shares", "shares_spoken", "likes", "ai_errors",
                 "tts_errors", "reconnects", "queue_peak", "suppressed_spam", "deduped_messages",
-                "expired", "replies", "audio_failed", "queue_dropped")})
+                "expired", "replies", "audio_failed", "queue_dropped", "self_host_lines",
+                "topics_started", "topics_completed", "topics_abandoned", "viewer_responses_to_topics",
+                "self_host_interruptions", "self_host_suppressed_by_crowd")})
             self.recent = deque(maxlen=20000)
             self.latencies = deque(maxlen=500)
 

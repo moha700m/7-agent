@@ -95,7 +95,7 @@ class SemanticDeduplicator:
 
 
 class PriorityEngine:
-    BASE = dict(gift=950, comment=600, follow=900, share=650, join=320, like=80, proactive=40, manual=980)
+    BASE = dict(gift=950, comment=600, follow=900, share=650, join=320, like=80, proactive=40, self_host=30, manual=980)
 
     def score(self, event, state=None):
         state = state or {}
@@ -106,6 +106,7 @@ class PriorityEngine:
                 "question":850,"personal_question":860,"conversation_continuation":830,"request":760,
                 "joke":680,"compliment":620,"greeting":580,"other":600}.get(c.get("category"),max(560,int(c.get("priority",45))*9))
             score += 25 if event.get("direct_mention") else 0
+            if event.get("self_host_topic_reply"): score=max(score,885)
         if event.get("type") == "gift":
             score = 1000 if event.get("gift_value",0)>=100 else 960
             score += min(25,event.get("gift_value",0))

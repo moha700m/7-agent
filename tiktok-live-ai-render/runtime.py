@@ -16,6 +16,7 @@ from intelligence import CommentClassifier, SemanticDeduplicator, PriorityEngine
 from queue_manager import EventQueue
 from behavior import CrowdEngine, MoodEngine, VoiceStyleEngine, AutoPersonality, ProactiveHost, PROFILES
 from providers import ProviderManager
+from self_host import SelfHostEngine
 from tiktok_client import run_client
 
 
@@ -53,6 +54,7 @@ class HostRuntime:
         self.crowd_engine, self.mood = CrowdEngine(), MoodEngine()
         self.voice = VoiceStyleEngine()
         self.auto, self.proactive = AutoPersonality(), ProactiveHost()
+        self.self_host = SelfHostEngine()
         self.providers = ProviderManager(self.metrics)
         self.stop_event = threading.Event()
         self.responder_thread = self.tiktok_thread = None
@@ -115,6 +117,8 @@ class HostRuntime:
             event = dict(type=data.get("type","comment"), username=str(data.get("username") or data.get("name") or "sim_viewer")[:80],
                 name=safe_text(data.get("name") or data.get("username") or "مشاهد")[:80], text=safe_text(data.get("text","")),
                 received_at=now,event_id=uuid.uuid4().hex, timings={"event_received":now})
+            for key in ("self_host_action","self_host_topic_id","self_host_topic_title"):
+                if key in data: event[key]=safe_text(data.get(key,""))[:160]
             for key in ("gift_count","gift_value","count"):
                 event[key] = max(0,min(100000,int(data.get(key,1 if key!="gift_value" else 0))))
             event["streak_finished"] = bool(data.get("streak_finished"))
@@ -144,6 +148,8 @@ class HostRuntime:
                 self.memory.mark_join(user,event["name"])
             elif kind=="gift":
                 self.memory.mark_gift(user,event["name"],event["gift_count"])
+            linked=self.self_host.note_event(event,self.cfg) if kind not in ("self_host","proactive","manual") else False
+            if linked:self.metrics.inc("viewer_responses_to_topics")
             event["priority_score"] = self.priority.score(event)
             event["timings"]["classification_done"] = time.time()
             decision, reason = self.dedupe.decide(event["text"],kind,user,data.get("source_id"))
@@ -167,8 +173,10 @@ class HostRuntime:
                 self.like_bucket=0
             # A real viewer interaction always outranks autonomous/proactive chatter.
             if kind in ("gift","follow","share","comment"):
-                for old in self.queue.drop_types({"proactive"}):
+                for old in self.queue.drop_types({"proactive","self_host"}):
                     self.skip(old,"interrupted by live viewer interaction","INTERRUPTED")
+                    if old.get("type")=="self_host":self.metrics.inc("self_host_interruptions")
+                self.self_host.interrupt()
             self.mood.update(event,self.crowd(),self.cfg)
             reason = self.reply_policy(event)
             if reason:
@@ -193,7 +201,7 @@ class HostRuntime:
     def reply_policy(self, event):
         kind=event["type"]
         b=self.cfg["behavior"]
-        if kind not in ("manual","proactive") and not b.get("respond_"+dict(comment="comments",join="joins",gift="gifts",follow="follows",share="shares",like="likes")[kind],True):
+        if kind not in ("manual","proactive","self_host") and not b.get("respond_"+dict(comment="comments",join="joins",gift="gifts",follow="follows",share="shares",like="likes")[kind],True):
             return "event disabled"
         crowd=self.crowd()
         if kind=="join":
@@ -283,6 +291,10 @@ class HostRuntime:
                 for old in expired:
                     self.skip(old,"expired","EXPIRED")
                 if event is None:
+                    action=self.self_host.next_action(self.cfg,self.crowd(),self.player_idle(),self.queue.size(),self.mood.current)
+                    if action:
+                        self.ingest(action)
+                        continue
                     line=self.proactive.next_line(self.cfg,time.time()-max(self.last_event,self.last_spoken),self.player_idle())
                     if line:
                         self.ingest(dict(type="proactive",username="host",text=line))
@@ -305,6 +317,10 @@ class HostRuntime:
                     reply=("هلا {name} رجعت نورت" if event["context"].get("joins",0)>0 else "هلا والله يا {name} نورت").format(name=event["name"])
                 elif event["type"] in ("proactive","manual"):
                     reply=event["text"]
+                elif event["type"]=="self_host" and self.fixture:
+                    reply="سؤال سريع، سنايبر ولا شتقن؟"
+                elif event["type"]=="self_host":
+                    reply=self.providers.reply(event,cfg)
                 else:
                     fast_reply=self.fast_interaction_reply(event)
                     if fast_reply:
@@ -347,6 +363,12 @@ class HostRuntime:
                         self.metrics.inc("follows_spoken")
                     elif event["type"]=="share":
                         self.metrics.inc("shares_spoken")
+                    elif event["type"]=="self_host":
+                        self.metrics.inc("self_host_lines")
+                        if event.get("self_host_action")=="opening":self.metrics.inc("topics_started")
+                        self.self_host.record_host_line(event,reply,cfg)
+                    if event.get("self_host_topic_reply"):
+                        self.self_host.record_ai_reply(event,cfg)
                     self.memory.add_ai_reply(event["username"],reply,event["type"])
                     self.recent_replies.append(normalize(reply))
                     self.last_spoken=time.time()
@@ -376,6 +398,7 @@ class HostRuntime:
             self.dedupe=SemanticDeduplicator()
             self.recent_replies.clear()
             self.metrics.reset()
+            self.self_host.reset()
             self.last_event=self.last_spoken=time.time()
             self.last_join=0; self.like_bucket=0
             self.pending_audio=None
@@ -439,7 +462,33 @@ class HostRuntime:
                 personality_mode=self.cfg["personality_mode"],proactive_enabled=self.cfg["proactive_enabled"],
                 crowd_enabled=self.cfg["crowd_enabled"],simulation=self.simulation,fixture=self.fixture,
                 audio_epoch=self.audio_epoch,boot_id=self.boot_id,player_connected=time.time()-self.player["heartbeat"]<10,
-                current_playing=self.player["current_id"],memory_users=len(self.memory.users))
+                current_playing=self.player["current_id"],memory_users=len(self.memory.users),**self.self_host.status(self.cfg))
+
+    def self_host_status(self):
+        with self.lock:return dict(ok=True,**self.self_host.status(self.cfg),metrics=self.self_host.metric_snapshot())
+
+    def self_host_configure(self, data):
+        allowed={"self_host_enabled","self_host_mode","self_host_activity","self_host_idle_before_start","self_host_min_gap",
+            "self_host_max_gap","self_host_max_consecutive","self_host_topic_timeout","self_host_topic_repeat_cooldown",
+            "self_host_banter_level","self_host_question_frequency","self_host_allow_stories","self_host_allow_debates",
+            "self_host_allow_banter","self_host_allow_challenges","self_host_allow_polls","self_host_major_question_min","self_host_major_question_max"}
+        return self.configure({k:v for k,v in data.items() if k in allowed})
+
+    def self_host_action(self, action, data=None):
+        data=data or {}
+        with self.lock:
+            if action=="speak-now":self.self_host.speak_now()
+            elif action=="new-topic":self.self_host.request_new_topic()
+            elif action=="stop-topic":
+                self.self_host.stop_topic();self.metrics.inc("topics_abandoned")
+            elif action=="pause":self.self_host.pause()
+            elif action=="resume":self.self_host.resume(self.cfg)
+            elif action=="owner-talking":self.self_host.set_owner_talking(bool(data.get("value",True)),self.cfg)
+            else:raise ValueError("إجراء Self Host غير مدعوم")
+            return self.self_host_status()
+
+    def self_host_metrics(self):
+        return {**self.metrics.snapshot(),**self.self_host.metric_snapshot()}
 
     def health(self):
         with self.lock:

@@ -55,10 +55,21 @@ def build_config(data):
 
     for key, default in {"personality_mode":"manual", "mood_override":"auto", "topic_profile":"cod_snd", "secondary_model":"openai/gpt-4o-mini", "third_model":"meta-llama/llama-3.3-70b-instruct", "tts_fallback":"vibi"}.items():
         result[key] = str(data.get(key) or default)[:120]
-    for key, default in {"proactive_enabled":False, "crowd_enabled":True, "allow_profile_persona":False}.items():
+    for key, default in {"proactive_enabled":False, "crowd_enabled":True, "allow_profile_persona":False,
+        "self_host_enabled":True, "self_host_allow_stories":True, "self_host_allow_debates":True,
+        "self_host_allow_banter":True, "self_host_allow_challenges":True, "self_host_allow_polls":True}.items():
         result[key] = data.get(key, default) is True
-    for key, low, high, default in [("memory_ttl_hours",6,24,12),("persona_min_duration",600,3600,900),("idle_threshold",45,300,75),("max_proactive_per_10min",0,8,3)]:
+    for key, low, high, default in [("memory_ttl_hours",6,24,12),("persona_min_duration",600,3600,900),("idle_threshold",45,300,75),("max_proactive_per_10min",0,8,3),
+        ("self_host_idle_before_start",10,120,20),("self_host_min_gap",10,60,20),("self_host_max_gap",15,120,40),
+        ("self_host_max_consecutive",1,5,2),("self_host_topic_timeout",30,300,90),("self_host_topic_repeat_cooldown",300,3600,1200),
+        ("self_host_banter_level",0,10,6),("self_host_major_question_min",180,1200,300),("self_host_major_question_max",240,1800,480)]:
         result[key] = int(clamp_num(data.get(key),low,high,default))
+    result["self_host_activity"] = str(data.get("self_host_activity") or "normal").lower()
+    if result["self_host_activity"] not in ("low","normal","high","chaos"): result["self_host_activity"]="normal"
+    result["self_host_mode"] = str(data.get("self_host_mode") or "auto").lower()
+    if result["self_host_mode"] not in ("auto","manual"): result["self_host_mode"]="auto"
+    result["self_host_question_frequency"] = str(data.get("self_host_question_frequency") or "high").lower()
+    if result["self_host_question_frequency"] not in ("low","medium","high"): result["self_host_question_frequency"]="high"
     from characters import CHARACTER_PRESETS
     from behavior import PROFILES, MOODS
     result["mood_default"] = CHARACTER_PRESETS[result["preset_id"]].get("mood_default","normal")

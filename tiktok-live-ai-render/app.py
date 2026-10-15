@@ -128,7 +128,35 @@ def api_profiles(): return jsonify(ok=True,profiles=[dict(id=k,**v) for k,v in P
 
 
 @app.get('/api/metrics')
-def api_metrics(): return jsonify(ok=True,metrics=HOST.metrics.snapshot())
+def api_metrics(): return jsonify(ok=True,metrics=HOST.self_host_metrics())
+
+
+@app.get('/api/self-host/status')
+def api_self_host_status(): return jsonify(HOST.self_host_status())
+
+
+@app.post('/api/self-host/configure')
+def api_self_host_configure(): return jsonify(HOST.self_host_configure(body()))
+
+
+@app.post('/api/self-host/new-topic')
+def api_self_host_new_topic(): return jsonify(HOST.self_host_action('new-topic'))
+
+
+@app.post('/api/self-host/stop-topic')
+def api_self_host_stop_topic(): return jsonify(HOST.self_host_action('stop-topic'))
+
+
+@app.post('/api/self-host/speak-now')
+def api_self_host_speak_now(): return jsonify(HOST.self_host_action('speak-now'))
+
+
+@app.post('/api/self-host/pause')
+def api_self_host_pause(): return jsonify(HOST.self_host_action('pause'))
+
+
+@app.post('/api/self-host/resume')
+def api_self_host_resume(): return jsonify(HOST.self_host_action('resume'))
 
 
 @app.post('/api/metrics/reset')
@@ -188,7 +216,20 @@ def api_simulate():
     data=body()
     with HOST.lock:
         if not HOST.running or not HOST.simulation: raise ValueError('ابدأ وضع المحاكاة أولًا؛ البث الحقيقي لا يقبل أحداث تجريبية')
-        if data.get('type')=='burst':
+        sim_type=data.get('type')
+        if sim_type=='idle':
+            HOST.self_host.simulate_idle(max(1,min(300,float(data.get('seconds',30)))))
+            return jsonify(ok=True,simulation='idle',self_host=HOST.self_host_status())
+        if sim_type=='topic_response':
+            row=HOST.ingest(dict(type='comment',username=data.get('username','sim_viewer'),text=data.get('text','سنايبر')))
+            return jsonify(ok=True,event_id=row['event_id'],linked=bool(row.get('self_host_topic_reply')))
+        if sim_type=='no_response':
+            HOST.self_host.simulate_idle(60)
+            HOST.self_host.speak_now()
+            return jsonify(ok=True,simulation='no_response')
+        if sim_type=='owner_talking':
+            return jsonify(HOST.self_host_action('owner-talking',{'value':bool(data.get('value',True))}))
+        if sim_type=='burst':
             count=max(1,min(80,int(data.get('count',30))))
             rows=[]
             for i in range(count):

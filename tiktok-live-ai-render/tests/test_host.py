@@ -14,6 +14,7 @@ from metrics import MetricsManager
 from intelligence import CommentClassifier, SemanticDeduplicator, PriorityEngine
 from queue_manager import EventQueue
 from behavior import CrowdEngine, MoodEngine, AutoPersonality, ProactiveHost, VoiceStyleEngine
+from self_host import SelfHostEngine, TOPIC_BANK
 from providers import ProviderManager
 from tiktok_client import backoff, run_client
 
@@ -228,3 +229,52 @@ def test_profile_changes_persona_only_with_explicit_permission(host):
     assert host.cfg['preset_id']=='majlis_friend'
     host.configure({'topic_profile':'competitive','preset_id':'nora_live','allow_profile_persona':True})
     assert host.cfg['preset_id']=='nora_live'  # explicit character selection wins
+
+
+class FixedRng:
+    def random(self): return 0
+    def uniform(self,a,b): return a
+    def choice(self,seq): return seq[0]
+    def choices(self,seq,weights=None,k=1): return [seq[0]]
+
+
+def test_self_host_topic_bank_and_idle_state_machine():
+    assert len(TOPIC_BANK) >= 100
+    clock=[1000.0]
+    h=SelfHostEngine(clock=lambda:clock[0],rng=FixedRng())
+    cfg=build_config({'self_host_enabled':True,'self_host_idle_before_start':20,'self_host_min_gap':20})
+    crowd={'state':'Quiet'}
+    assert h.next_action(cfg,crowd,True,0,'normal') is None
+    clock[0]+=25
+    action=h.next_action(cfg,crowd,True,0,'normal')
+    assert action and action['type']=='self_host' and action['self_host_action']=='opening'
+    h.record_host_line(action,'سؤال سريع، وش رايكم؟',cfg)
+    assert h.status(cfg)['self_host_state']=='WAITING_FOR_RESPONSE'
+    event={'type':'comment','username':'u','text':'سنايبر','classification':{'category':'other','priority':45},'direct_mention':False}
+    assert h.note_event(event,cfg)
+    assert event['self_host_topic_reply']
+    assert event['classification']['category']=='conversation_continuation'
+
+
+def test_self_host_respects_player_queue_and_owner():
+    clock=[1000.0]
+    h=SelfHostEngine(clock=lambda:clock[0],rng=FixedRng())
+    cfg=build_config({'self_host_enabled':True,'self_host_idle_before_start':10})
+    h.simulate_idle(30)
+    assert not h.should_speak(cfg,{'state':'Quiet'},False,0)
+    assert not h.should_speak(cfg,{'state':'Quiet'},True,1)
+    h.set_owner_talking(True,cfg)
+    assert not h.should_speak(cfg,{'state':'Quiet'},True,0)
+    h.set_owner_talking(False,cfg)
+    h.simulate_idle(30)
+    assert h.should_speak(cfg,{'state':'Quiet'},True,0)
+
+
+def test_runtime_self_host_fixture_audio(host):
+    host.start({'self_host_enabled':True,'behavior':{'global_cooldown':0}},simulation=True,fixture=True)
+    host.heartbeat({'player_id':'p1'})
+    host.self_host.simulate_idle(60)
+    host.self_host.speak_now()
+    until(lambda:host.metrics.snapshot()['self_host_lines']>=1)
+    assert host.audio and host.audio[-1]['event_type']=='self_host'
+    assert host.self_host_status()['current_topic']

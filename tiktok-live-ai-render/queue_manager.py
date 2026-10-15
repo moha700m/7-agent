@@ -4,7 +4,7 @@ from intelligence import PriorityEngine
 
 
 class EventQueue:
-    TTL = dict(comment=30, join=18, follow=60, share=35, gift=120, like=8, proactive=8, manual=30)
+    TTL = dict(comment=30, join=18, follow=60, share=35, gift=120, like=8, proactive=8, self_host=15, manual=30)
 
     def __init__(self, maxsize=80, clock=time.time):
         self.maxsize, self.clock = maxsize, clock
