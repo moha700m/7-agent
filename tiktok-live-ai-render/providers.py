@@ -30,7 +30,8 @@ def build_system_prompt(cfg):
 مواضيع تجنبها: {p.get("avoid_topics", "")}.
 
 قواعد الرد:
-- استخدم عامية سعودية طبيعية فعلًا، بمفردات محلية قصيرة ومفهومة. تجنب الفصحى الثقيلة واللهجات المصرية أو الشامية.
+- استخدم عامية سعودية طبيعية بلمسة نجدية خفيفة ومفهومة، مثل: أبي، الحين، وش، ليش، مرّة، يا رجال.
+- ممنوع الكلمات المصرية الواضحة مثل: عايز، دلوقتي، إزاي، أوي، مش كده.
 - خلك كأنك داخل بث حي: رد سريع ومباشر، وقفات قصيرة، ولا تبني جمل مترجمة حرفيًا من الإنجليزية.
 - الرد صوتي؛ لا تستخدم Markdown أو رموز مزعجة أو شرح تقني.
 - لا تخترع أحداثًا داخل اللعبة ولا معلومات عن المشاهد.
@@ -172,6 +173,9 @@ def openrouter_speak(text, cfg=None):
         "stability":style.get("stability",cfg.get("voice_stability",.5)),
         "similarity_boost":cfg.get("voice_similarity",.75),
     }
+    if voice_id=="yXEnnEln9armDCyhkXcA":
+        voice_settings["stability"]=max(.62,float(voice_settings["stability"]))
+        voice_settings["similarity_boost"]=max(.82,float(voice_settings["similarity_boost"]))
     if "eleven-v4" not in model:
         voice_settings["speed"]=style.get("speed",cfg.get("voice_speed",1))
     request_body = {
@@ -202,17 +206,22 @@ def openrouter_speak(text, cfg=None):
 def openrouter_stream_speak(text, cfg, on_chunk):
     """Stream raw 24 kHz PCM from OpenRouter so playback starts before synthesis ends."""
     key=cfg.get("openrouter_key","")
-    voice_id=(cfg.get("tts_voice") or "s83SAGdFTflAwJcAV81K").strip()
+    voice_id=(cfg.get("tts_voice") or "yXEnnEln9armDCyhkXcA").strip()
     model=(cfg.get("tts_model") or "elevenlabs/eleven-v4-turbo").strip()
     spoken_text=normalize_saudi_speech(text)
     style=cfg.get("voice_style",{})
+    stream_stability=style.get("stability",cfg.get("voice_stability",.5))
+    stream_similarity=cfg.get("voice_similarity",.75)
+    if voice_id=="yXEnnEln9armDCyhkXcA":
+        stream_stability=max(.62,float(stream_stability))
+        stream_similarity=max(.82,float(stream_similarity))
     body={
         "model":model,
         "input":spoken_text,
         "voice":voice_id,
         "provider":{"options":{"elevenlabs":{"language_code":"ar","voice_settings":{
-            "stability":style.get("stability",cfg.get("voice_stability",.5)),
-            "similarity_boost":cfg.get("voice_similarity",.75),
+            "stability":stream_stability,
+            "similarity_boost":stream_similarity,
         }}}},
     }
     headers={
