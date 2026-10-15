@@ -57,6 +57,17 @@ def normalize_saudi_speech(text):
     text=re.sub(r"\[[^\]]{1,60}\]", " ", text)
     text=re.sub(r"https?://\S+|www\.\S+", " ", text, flags=re.I)
     text=text.replace("_"," ").replace("|","،")
+    # Guard against obvious non-Saudi dialect drift in generated text before TTS.
+    dialect_map=(
+        (r"\bعايز(?:ة|ين)?\b","أبي"),
+        (r"\bدلوقتي\b","الحين"),
+        (r"\bازاي|إزاي\b","كيف"),
+        (r"\bأوي|اوي\b","مرّة"),
+        (r"\bمش كده\b","مو كذا"),
+        (r"\bمش\b","مو"),
+    )
+    for pattern,replacement in dialect_map:
+        text=re.sub(pattern,replacement,text,flags=re.I)
     for pattern,replacement in COMMON_TERMS:
         text=re.sub(pattern,replacement,text,flags=re.I)
     text=re.sub(r"(?<!\w)\d{1,3}(?!\w)",_replace_number,text)
