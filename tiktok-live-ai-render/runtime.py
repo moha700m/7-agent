@@ -195,7 +195,11 @@ class HostRuntime:
         if kind=="join":
             if crowd["state"] in ("Busy","Packed"):
                 return "crowd mode: skip join"
-            if event.get("context",{}).get("welcomed_recently") or time.time()-self.last_join < b["join_cooldown"]:
+            # Welcome new viewers quickly when the room is quiet/normal.
+            # Keep the per-viewer memory guard so reconnect/rejoin spam is not repeated.
+            fast_cap = 8 if crowd["state"]=="Quiet" else 14
+            effective_join_cooldown = min(float(b["join_cooldown"]), fast_cap)
+            if event.get("context",{}).get("welcomed_recently") or time.time()-self.last_join < effective_join_cooldown:
                 return "welcome cooldown"
         if kind=="comment" and event["priority_score"] < crowd["min_priority"]:
             return "crowd mode: selected higher priority interaction"
