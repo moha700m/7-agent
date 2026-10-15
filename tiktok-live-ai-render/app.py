@@ -39,6 +39,7 @@ class RaceGame:
         self.client_loop = None
         self.last_tiktok_event = ""
         self.last_tiktok_event_at = 0.0
+        self.last_state_log_at = 0.0
         threading.Thread(target=self._game_loop, daemon=True).start()
         threading.Thread(target=self._tiktok_loop, daemon=True).start()
 
@@ -46,7 +47,7 @@ class RaceGame:
         with self.lock:
             self.last_tiktok_event = str(kind)
             self.last_tiktok_event_at = time.time()
-        print(f"RACE_EVENT {kind} user={username} {extra}".strip(), flush=True)
+        print(f"RACE_EVENT {kind} user={username} pid={os.getpid()} game={id(self)} {extra}".strip(), flush=True)
 
     def _player(self, username, name):
         rng = random.Random(f"{username}:{self.round}")
@@ -87,7 +88,7 @@ class RaceGame:
                 if not self.players:
                     self.phase_started = time.time()
                 self.players[username] = self._player(username, name)
-                print(f"RACE_JOIN added user={username} phase={self.phase} players={len(self.players)} queued={len(self.waiting_next)}", flush=True)
+                print(f"RACE_JOIN added user={username} pid={os.getpid()} game={id(self)} phase={self.phase} players={len(self.players)} queued={len(self.waiting_next)}", flush=True)
             else:
                 self.waiting_next[username] = (str(name or username).strip()[:24] or username)
                 print(f"RACE_JOIN queued user={username} phase={self.phase} players={len(self.players)} queued={len(self.waiting_next)}", flush=True)
@@ -191,6 +192,9 @@ class RaceGame:
             else:
                 remaining = max(0, math.ceil(RESULT_SECONDS - (now - self.phase_started)))
             leaders = sorted(self.scores.values(), key=lambda x: (x["points"], x["wins"]), reverse=True)[:5]
+            if now - self.last_state_log_at >= 2.0:
+                self.last_state_log_at = now
+                print(f"RACE_STATE pid={os.getpid()} game={id(self)} players={len(players)} phase={self.phase} room={self.room_id} live={self.live}", flush=True)
             effective_live = "LIVE" if self.room_id else self.live
             return dict(
                 ok=True, live=effective_live, username=TIKTOK_USERNAME, room_id=self.room_id,
