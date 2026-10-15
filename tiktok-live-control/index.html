@@ -104,7 +104,7 @@ hr{border:0;border-top:1px solid var(--line);margin:15px 0}.modeInfo{margin-top:
       <p class="hint">المبادرة تحتاج مشغلًا متصلًا وخاملًا. تبديل الشخصية يوقف المقاطع القديمة ويُبقي اتصال TikTok قائمًا.</p>
     </div>
     <div class="card"><div class="title">Failover</div><div class="grid">
-      <div><label for="secondary_model">Secondary AI model</label><input id="secondary_model" value="openai/gpt-4o-mini"></div>
+      <div><label for="secondary_model">Secondary AI model</label><input id="secondary_model" value="google/gemini-3.7-flash"></div>
       <div><label for="third_model">Third AI model</label><input id="third_model" value="meta-llama/llama-3.3-70b-instruct"></div>
       <div><label for="tts_provider">Primary TTS</label><select id="tts_provider"><option value="openrouter">OpenRouter</option><option value="vibi">Vibi / ElevenLabs</option></select></div>
       <div><label for="tts_fallback">Fallback TTS</label><select id="tts_fallback"><option value="vibi">Vibi / ElevenLabs</option><option value="openrouter">OpenRouter</option><option value="none">بدون</option></select></div>
@@ -187,9 +187,9 @@ hr{border:0;border-top:1px solid var(--line);margin:15px 0}.modeInfo{margin-top:
       <div class="title">OpenRouter + ElevenLabs v4 Turbo</div>
       <div class="grid">
         <div><label>OpenRouter Key</label><input id="openrouter_key" type="password" placeholder="sk-or-v1-..."><div id="orSecretNote" class="secretNote">يُحفظ بشكل مشفّر وآمن على هذا المتصفح بعد أول اختبار أو تشغيل.</div></div>
-        <div><label>الموديل</label><input id="model" value="google/gemini-2.5-flash"></div>
+        <div><label>الموديل</label><input id="model" value="google/gemini-3.8-flash"></div>
         <div><label>Vibi Key - احتياطي اختياري</label><input id="vibi_key" type="password" placeholder="اختياري"><div id="vibiSecretNote" class="secretNote">يُحفظ بشكل مشفّر وآمن على هذا المتصفح بعد أول اختبار أو تشغيل.</div></div>
-        <div><label>ElevenLabs Voice</label><input id="tts_voice" value="george"></div>
+        <div><label>ElevenLabs Voice</label><input id="tts_voice" value="s83SAGdFTflAwJcAV81K"><div class="hint">Saudi Native: Adeeb — يتبدل تلقائيًا لصوت سعودي أنثوي مع الشخصيات الأنثوية.</div></div>
         <div><label>TTS Model</label><input id="tts_model" value="elevenlabs/eleven-v4-turbo" readonly></div>
         <div><label>Vibi Voice ID - احتياطي</label><input id="voice_id" value="rpGHcNQJvO8dFNNFNj1v"></div>
         <div><label>Vibi Model - احتياطي</label><input id="vibi_model" value="eleven_v3"></div>
@@ -353,7 +353,7 @@ async function playNext(){
   try{await a.play()}catch{playing=false;addLog("المتصفح منع الصوت التلقائي؛ اضغط داخل الصفحة ثم جرّب.","error")}
 }
 async function copyPlayerLink(){
-  const url=location.origin+"/player.html?v=20261015-3";
+  const url=location.origin+"/player.html?v=20261015-4";
   $("playerLink").textContent=url;
   try{
     await navigator.clipboard.writeText(url);
@@ -391,10 +391,10 @@ async function pollStatus(){
     $("stTikTok").textContent=j.tiktok||"—";$("stTikTok").className=j.tiktok==="LIVE"?"ok":j.tiktok==="ERROR"?"bad":"warn";
     $("stRoom").textContent=j.room_id||"—";
     $("stCharacter").textContent=j.agent_name||j.preset_label||"—";
-    $("stVoice").textContent=j.tts_voice?(j.tts_voice+" · "+(j.voice_gender||"")):"—";
+    $("stVoice").textContent=j.tts_voice_label?(j.tts_voice_label+" · "+(j.voice_gender||"")):(j.tts_voice?(j.tts_voice+" · "+(j.voice_gender||"")):"—");
     if($("playerLink")){
       if(j.running&&!j.player_connected){
-        $("playerLink").innerHTML="<b style='color:var(--bad)'>مشغل الصوت غير متصل.</b> استخدم رابط: "+esc(location.origin+"/player.html?v=20261015-3");
+        $("playerLink").innerHTML="<b style='color:var(--bad)'>مشغل الصوت غير متصل.</b> استخدم رابط: "+esc(location.origin+"/player.html?v=20261015-4");
       }else if(j.player_connected){
         $("playerLink").innerHTML="<span class='ok'>✓ مشغل LIVE متصل وجاهز للصوت</span>";
       }

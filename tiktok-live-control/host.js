@@ -68,6 +68,8 @@ function renderHostStatus(j){
   const merged={...m,...j,latency:(m.average_response_latency||0)+"s",player_connected:j.player_connected?"متصل":"بانتظار المشغل",paused:j.paused?"Paused":"Active"};
   for(const key of Object.keys(statFields))$("host_"+key).textContent=merged[key]??"—";
   $("muteButton").textContent=j.muted?"Unmute AI":"Mute AI";
+  if($("stVoice")&&j.tts_voice_label)$("stVoice").textContent=j.tts_voice_label+" · "+(j.voice_gender||"");
+
   if($("sh_state"))$("sh_state").textContent=j.self_host_state||"—";
   if($("sh_topic"))$("sh_topic").textContent=j.current_topic||"—";
   if($("sh_engagement"))$("sh_engagement").textContent=(j.topic_engagement??0)+"/100";
@@ -107,7 +109,7 @@ async function restartAgent(){try{await api("restart","POST",payload());addLog("
 async function resetMetrics(){try{await api("metrics/reset","POST",{});pollStatus();}catch(e){addLog(e.message,"error");}}
 async function copyPlayerLink(){
   try{
-    const j=await api("player_token");const url=new URL("player.html",location.href);url.hash="token="+encodeURIComponent(j.token);
+    const j=await api("player_token");const url=new URL("player.html?v=20261015-4",location.href);url.hash="token="+encodeURIComponent(j.token);
     $("playerLink").textContent=url.href;
     if(navigator.clipboard){await navigator.clipboard.writeText(url.href);addLog("تم نسخ رابط المشغل، صالح لمدة 30 يومًا. احفظه لنفسك.");}
   }catch(e){addLog(e.message,"error");}

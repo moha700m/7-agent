@@ -56,7 +56,7 @@ function saveSecretCookie(res, secrets, secret) {
 }
 
 module.exports = async function handler(req, res) {
-  const allowed = new Set(["status","events","test","start","stop","restart","preview","configure","presets","secret_status","health/details","metrics","metrics/reset","profiles","control","simulation/start","simulate","audio/events","player/heartbeat","player_token","player_bootstrap","self-host/status","self-host/configure","self-host/new-topic","self-host/stop-topic","self-host/speak-now","self-host/pause","self-host/resume"]);
+  const allowed = new Set(["status","events","test","start","stop","restart","preview","configure","presets","secret_status","health/details","metrics","metrics/reset","profiles","control","simulation/start","simulate","audio/events","audio/chunks","player/heartbeat","player_token","player_bootstrap","self-host/status","self-host/configure","self-host/new-topic","self-host/stop-topic","self-host/speak-now","self-host/pause","self-host/resume"]);
   res.setHeader("Cache-Control", "no-store");
   const path = String(req.query.path || "");
   if (!allowed.has(path)) return res.status(400).json({ error: "مسار غير مسموح" });
@@ -65,7 +65,7 @@ module.exports = async function handler(req, res) {
   const token = process.env.CONTROL_TOKEN;
   if (!base || !token) return res.status(503).json({ error: "إعدادات الربط غير مكتملة" });
 
-  const readPaths = new Set(["status","events","presets","secret_status","health/details","metrics","profiles","audio/events","player_token","player_bootstrap","self-host/status"]);
+  const readPaths = new Set(["status","events","presets","secret_status","health/details","metrics","profiles","audio/events","audio/chunks","player_token","player_bootstrap","self-host/status"]);
   if ((readPaths.has(path) && req.method !== "GET") || (!readPaths.has(path) && req.method !== "POST")) {
     return res.status(405).json({error:"طريقة غير مسموحة"});
   }
@@ -104,7 +104,7 @@ module.exports = async function handler(req, res) {
     const claims = JSON.parse(Buffer.from(playerPayload, "base64url").toString());
     playerAllowed = playerSignature && playerSignature.length === expected.length && crypto.timingSafeEqual(Buffer.from(playerSignature),Buffer.from(expected)) && claims.exp > Date.now();
   } catch {}
-  const playerPaths = new Set(["audio/events","player/heartbeat"]);
+  const playerPaths = new Set(["audio/events","audio/chunks","player/heartbeat"]);
   // Keep an already-open TikTok LIVE Studio browser source working after upgrades.
   // Only same-origin requests originating from player.html get this narrow player access.
   let sameOriginPlayer = false;
@@ -143,8 +143,8 @@ module.exports = async function handler(req, res) {
     return res.status(200).json({token:claims+"."+sign("player:"+claims),expires_days:30});
   }
   const target = new URL("/api/" + path, base);
-  if (["events","audio/events"].includes(path)) {
-    for (const key of ["since","initialize","player_id"]) if (req.query[key] !== undefined) target.searchParams.set(key,String(req.query[key]));
+  if (["events","audio/events","audio/chunks"].includes(path)) {
+    for (const key of ["since","initialize","player_id","audio_id"]) if (req.query[key] !== undefined) target.searchParams.set(key,String(req.query[key]));
   }
 
   const headers = { "X-Control-Token": token, "X-Operator-Id": crypto.createHash("sha256").update(savedSecrets.openrouter_key || "player").digest("hex").slice(0,24) };
