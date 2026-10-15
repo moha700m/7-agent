@@ -14,11 +14,11 @@ h1{font-size:25px;margin:0}.sub{color:var(--muted);font-size:13px;margin-top:5px
 label{display:block;color:#b9c0cc;font-size:12px;margin:0 0 6px}input,textarea,select{width:100%;background:var(--card2);color:#fff;border:1px solid #313744;border-radius:10px;padding:11px;font:inherit;outline:none}textarea{min-height:88px;resize:vertical}input:focus,textarea:focus,select:focus{border-color:#6877e8}
 .rangeRow{display:grid;grid-template-columns:1fr 70px;gap:8px;align-items:center}.toggle{display:flex;align-items:center;gap:9px;background:var(--card2);border:1px solid var(--line);padding:10px;border-radius:10px}.toggle input{width:auto}
 .actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:12px}button{border:0;border-radius:10px;padding:11px 15px;font-weight:900;cursor:pointer;background:#fff;color:#111}.secondary{background:#252b36;color:#fff}.danger{background:#612631;color:#fff}.accent{background:var(--accent);color:#fff}
-.statusGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}@media(max-width:760px){.statusGrid{grid-template-columns:1fr 1fr}}.stat{background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:11px}.stat b{display:block;color:var(--muted);font-size:11px;margin-bottom:4px}.ok{color:var(--ok)}.bad{color:var(--bad)}.warn{color:var(--warn)}
+.statusGrid{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}@media(max-width:760px){.statusGrid{grid-template-columns:1fr 1fr}}.stat{background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:11px}.stat b{display:block;color:var(--muted);font-size:11px;margin-bottom:4px}.ok{color:var(--ok)}.bad{color:var(--bad)}.warn{color:var(--warn)}
 .hint{font-size:12px;color:var(--muted);line-height:1.7}.research{background:#111827;border:1px solid #273758;border-radius:12px;padding:13px;line-height:1.8;color:#c8d2e5}
 #log{height:360px;overflow:auto;background:#080a0d;border-radius:12px;padding:10px}.row{padding:8px;border-bottom:1px solid #171a20;font-size:14px}.row small{color:#657080;margin-left:7px}.ai{color:#8ef0b0}.gift{color:var(--gift)}.error{color:#ff9aa6}.statusline{color:#98c7ff}
 .secretNote{font-size:11px;color:#87909e;margin-top:5px}.pill{display:inline-block;padding:4px 8px;border-radius:99px;background:#202630;color:#c8d0de;font-size:11px}
-hr{border:0;border-top:1px solid var(--line);margin:15px 0}
+hr{border:0;border-top:1px solid var(--line);margin:15px 0}.modeInfo{margin-top:10px;padding:10px 12px;border:1px solid #30384a;border-radius:10px;background:#0d1320;color:#cbd5e1;font-size:12px;line-height:1.7}.modeInfo b{color:#fff}.voiceChip{display:inline-block;margin-right:6px;padding:3px 7px;border-radius:99px;background:#20283a;color:#a9c3ff}
 </style>
 </head>
 <body>
@@ -45,7 +45,14 @@ hr{border:0;border-top:1px solid var(--line);margin:15px 0}
       <div class="title">اتصال TikTok LIVE</div>
       <div class="grid">
         <div><label>رابط البث أو @username</label><input id="tiktok" placeholder="https://www.tiktok.com/@username/live"></div>
-        <div><label>موضوع البث الحالي</label><input id="game_or_topic" value="Call of Duty - Search & Destroy"></div>
+        <div>
+          <label>وضع البث الحالي / الشخصية</label>
+          <select id="broadcast_mode" onchange="changeBroadcastMode()">
+            <option value="cyber_gamer">جاري تحميل الشخصيات...</option>
+          </select>
+          <div id="modeInfo" class="modeInfo">اختيار الشخصية يغيّر الكاركتر، الأسلوب، الحماس، الترحيب والصوت فورًا حتى أثناء البث.</div>
+        </div>
+        <div><label>اللعبة أو موضوع البث</label><input id="game_or_topic" value="Call of Duty - Search & Destroy"></div>
       </div>
       <div class="actions">
         <button class="secondary" onclick="testAll()">اختبار الاتصال كامل</button>
@@ -58,6 +65,8 @@ hr{border:0;border-top:1px solid var(--line);margin:15px 0}
       <div class="stat"><b>Room ID</b><span id="stRoom">—</span></div>
       <div class="stat"><b>OpenRouter</b><span id="stOR">—</span></div>
       <div class="stat"><b>الصوت</b><span id="stVibi">—</span></div>
+      <div class="stat"><b>الشخصية الحالية</b><span id="stCharacter">—</span></div>
+      <div class="stat"><b>Voice</b><span id="stVoice">—</span></div>
     </div>
     <div class="card">
       <div class="title">الإعداد المقترح للبث</div>
@@ -65,6 +74,7 @@ hr{border:0;border-top:1px solid var(--line);margin:15px 0}
         خلّ الهدايا والتعليقات أعلى أولوية، المتابعة والمشاركة بعدها، والدخول بمهلة حتى ما يصير إزعاج صوتي.
         الهدية المتسلسلة تُشكر مرة بعد انتهاء السلسلة، واللايكات تتجمع كدفعات بدل الرد على كل لايك.
         الردود الافتراضية قصيرة وبلهجة محلية، والوكيل ما يكرر طلب المتابعة أو الهدايا بشكل مزعج.
+        تقدر تغيّر وضع البث من القائمة فوق؛ الشخصية والصوت والسلوك تتبدل مباشرة بدون الحاجة لإيقاف الاتصال.
       </div>
     </div>
   </section>
@@ -178,6 +188,7 @@ hr{border:0;border-top:1px solid var(--line);margin:15px 0}
 <script>
 const $=id=>document.getElementById(id);
 let lastId=0, audioQueue=[], playing=false;
+let CHARACTER_PRESETS={};
 
 document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{
   document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
@@ -187,13 +198,14 @@ document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{
 
 const personaIds=["name","owner_name","dialect","tone","identity","energy","humor","sarcasm","max_words","stream_context","game_or_topic","special_instructions","avoid_topics","comment_instruction","join_instruction","gift_instruction","follow_instruction","share_instruction","like_instruction"];
 const behaviorIds=["respond_comments","respond_gifts","respond_follows","respond_shares","respond_joins","respond_likes","join_cooldown","global_cooldown","like_threshold","temperature"];
-const connIds=["tiktok","model","tts_voice","voice_id","tts_model","vibi_model","voice_language","voice_stability","voice_similarity","voice_speed"];
+const connIds=["tiktok","broadcast_mode","model","tts_voice","voice_id","tts_model","vibi_model","voice_language","voice_stability","voice_similarity","voice_speed"];
 
 function val(id){const e=$(id); return e.type==="checkbox"?e.checked:e.value}
 function num(id){return Number($(id).value)}
 function payload(){
   return {
     tiktok:val("tiktok"),
+    preset_id:val("broadcast_mode")||"cyber_gamer",
     model:val("model"),
     openrouter_key:val("openrouter_key"),
     vibi_key:val("vibi_key"),
@@ -220,6 +232,63 @@ function payload(){
     }
   }
 }
+function setField(id,value){
+  const e=$(id); if(!e||value===undefined||value===null)return;
+  if(e.type==="checkbox")e.checked=!!value;else e.value=value;
+}
+function renderModeInfo(p){
+  if(!p)return;
+  $("modeInfo").innerHTML="<b>"+esc(p.label)+"</b> — "+esc(p.type||"")+" <span class=\"voiceChip\">"+esc(p.voice_gender||"")+" · "+esc(p.voice_label||p.voice||"")+"</span><br>التبديل يغيّر الشخصية والصوت والسلوك في الموقع والباكند فورًا.";
+}
+function applyPresetFields(p){
+  if(!p)return;
+  Object.entries(p.persona||{}).forEach(([k,v])=>setField(k,v));
+  Object.entries(p.behavior||{}).forEach(([k,v])=>setField(k,v));
+  setField("tts_voice",p.voice);
+  setField("tts_model",p.tts_model||"elevenlabs/eleven-v4-turbo");
+  setField("voice_language",p.voice_language||"ar");
+  ["energy","humor","sarcasm"].forEach(id=>{if($(id)&&$(id+"V"))$(id+"V").value=$(id).value});
+  renderModeInfo(p);
+}
+async function loadCharacterPresets(){
+  try{
+    const j=await api("presets");
+    const list=j.presets||[];
+    CHARACTER_PRESETS=Object.fromEntries(list.map(p=>[p.id,p]));
+    const select=$("broadcast_mode");
+    select.innerHTML=list.map(p=>"<option value=\""+esc(p.id)+"\">"+esc(p.label)+" — "+esc(p.voice_gender||"")+"</option>").join("");
+    let saved={};
+    try{saved=JSON.parse(localStorage.getItem("cyber-live-settings-v4")||localStorage.getItem("cyber-live-settings-v3")||"{}")}catch{}
+    const mode=saved.broadcast_mode&&CHARACTER_PRESETS[saved.broadcast_mode]?saved.broadcast_mode:"cyber_gamer";
+    select.value=mode;
+    const isMigrating=!localStorage.getItem("cyber-live-settings-v4")||!saved.broadcast_mode;
+    if(isMigrating){
+      applyPresetFields(CHARACTER_PRESETS[mode]);
+      saveSettings(true);
+    }else{
+      renderModeInfo(CHARACTER_PRESETS[mode]);
+    }
+  }catch(e){
+    $("modeInfo").textContent="تعذر تحميل الشخصيات: "+e.message;
+  }
+}
+async function changeBroadcastMode(){
+  const id=val("broadcast_mode");
+  const p=CHARACTER_PRESETS[id];
+  if(!p)return;
+  applyPresetFields(p);
+  saveSettings(true);
+  addLog("تم اختيار "+p.label+" — جاري تفعيل الصوت "+p.voice_label);
+  try{
+    const j=await api("configure","POST",payload());
+    $("stCharacter").textContent=j.character||p.persona?.name||"—";
+    $("stVoice").textContent=(j.voice||p.voice)+" · "+(j.voice_gender||p.voice_gender||"");
+    addLog("تفعلت الشخصية والصوت مباشرة"+(j.running?" أثناء البث":" وجاهزة للتشغيل"));
+  }catch(e){
+    addLog("تم تغيير الواجهة، وتعذر تحديث الباكند الآن: "+e.message,"error");
+  }
+}
+
 async function api(path,method="GET",body=null,extra=""){
   const url="/api/backend?path="+encodeURIComponent(path)+(extra||"");
   const opt={method,headers:{}};
@@ -243,7 +312,7 @@ async function playNext(){
 }
 async function testAll(){
   saveSettings(true);
-  addLog("جاري فحص TikTok وOpenRouter وVibi...");
+  addLog("جاري فحص TikTok وOpenRouter والصوت...");
   try{
     const j=await api("test","POST",payload());
     $("stOR").textContent=j.openrouter.message;$("stOR").className=j.openrouter.ok?"ok":"bad";
@@ -266,6 +335,8 @@ async function pollStatus(){
     const j=await api("status");
     $("stTikTok").textContent=j.tiktok||"—";$("stTikTok").className=j.tiktok==="LIVE"?"ok":j.tiktok==="ERROR"?"bad":"warn";
     $("stRoom").textContent=j.room_id||"—";
+    $("stCharacter").textContent=j.agent_name||j.preset_label||"—";
+    $("stVoice").textContent=j.tts_voice?(j.tts_voice+" · "+(j.voice_gender||"")):"—";
     $("liveBadge").textContent=j.tiktok==="LIVE"?"● LIVE متصل":"● "+(j.tiktok||"غير متصل");
     $("liveBadge").style.color=j.tiktok==="LIVE"?"var(--ok)":"var(--warn)";
   }catch{}
@@ -278,12 +349,12 @@ async function pollEvents(){
 }
 function saveSettings(silent=false){
   const data={};[...personaIds,...behaviorIds,...connIds].forEach(id=>data[id]=val(id));
-  localStorage.setItem("cyber-live-settings-v3",JSON.stringify(data));
+  localStorage.setItem("cyber-live-settings-v4",JSON.stringify(data));
   if(!silent)addLog("تم حفظ كل الإعدادات على هذا الجهاز");
 }
 function loadSettings(){
   try{
-    const data=JSON.parse(localStorage.getItem("cyber-live-settings-v3")||"{}");
+    const data=JSON.parse(localStorage.getItem("cyber-live-settings-v4")||localStorage.getItem("cyber-live-settings-v3")||"{}");
     Object.entries(data).forEach(([id,v])=>{const e=$(id);if(!e)return;if(e.type==="checkbox")e.checked=!!v;else e.value=v});
     ["energy","humor","sarcasm"].forEach(id=>$(id+"V").value=$(id).value);
   }catch{}
@@ -301,13 +372,14 @@ async function loadSecretStatus(){
     }
   }catch{}
 }
-function resetSettings(){localStorage.removeItem("cyber-live-settings-v3");location.reload()}
+function resetSettings(){localStorage.removeItem("cyber-live-settings-v4");localStorage.removeItem("cyber-live-settings-v3");location.reload()}
 loadSettings();
 [...personaIds,...behaviorIds,...connIds].forEach(id=>{
+  if(id==="broadcast_mode")return;
   const e=$(id); if(!e)return;
   e.addEventListener(e.type==="checkbox"?"change":"input",()=>saveSettings(true));
 });
-pollStatus();pollEvents();loadSecretStatus();setInterval(pollStatus,2500);setInterval(pollEvents,1400);
+loadCharacterPresets();pollStatus();pollEvents();loadSecretStatus();setInterval(pollStatus,2500);setInterval(pollEvents,1400);
 </script>
 </body>
 </html>
