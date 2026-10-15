@@ -58,12 +58,14 @@ def build_config(data):
     for key, default in {"proactive_enabled":False, "crowd_enabled":True, "allow_profile_persona":False,
         "self_host_enabled":True, "self_host_allow_stories":True, "self_host_allow_debates":True,
         "self_host_allow_banter":True, "self_host_allow_challenges":True, "self_host_allow_polls":True,
-        "saudi_voice_auto":True, "tts_streaming":True}.items():
+        "saudi_voice_auto":True, "tts_streaming":True,
+        "race_commentator_enabled":False, "race_commentator_explain":True}.items():
         result[key] = data.get(key, default) is True
     for key, low, high, default in [("memory_ttl_hours",6,24,12),("persona_min_duration",600,3600,900),("idle_threshold",45,300,75),("max_proactive_per_10min",0,8,3),
         ("self_host_idle_before_start",10,120,20),("self_host_min_gap",10,60,20),("self_host_max_gap",15,120,40),
         ("self_host_max_consecutive",1,5,2),("self_host_topic_timeout",30,300,90),("self_host_topic_repeat_cooldown",300,3600,1200),
-        ("self_host_banter_level",0,10,6),("self_host_major_question_min",180,1200,300),("self_host_major_question_max",240,1800,480)]:
+        ("self_host_banter_level",0,10,6),("self_host_major_question_min",180,1200,300),("self_host_major_question_max",240,1800,480),
+        ("race_commentator_min_gap",4,30,8),("race_commentator_hype",0,10,7)]:
         result[key] = int(clamp_num(data.get(key),low,high,default))
     result["self_host_activity"] = str(data.get("self_host_activity") or "normal").lower()
     if result["self_host_activity"] not in ("low","normal","high","chaos"): result["self_host_activity"]="normal"
