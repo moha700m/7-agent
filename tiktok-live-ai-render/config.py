@@ -95,7 +95,8 @@ def build_config(data):
     # Auto-upgrade them to public Saudi-native ElevenLabs library voices.
     stock_english=set(voices)
     old_saudi_male={"s83SAGdFTflAwJcAV81K"}
-    if result.get("saudi_voice_auto",True) and (result["tts_voice"].lower() in stock_english or result["tts_voice"] in old_saudi_male):
-        result["tts_voice"] = "gVzwmdZzRgBrNjXaTmi5" if result["voice_gender"]=="أنثى" else "yXEnnEln9armDCyhkXcA"
-    result["tts_voice_label"] = "Layan — Saudi" if result["voice_gender"]=="أنثى" and result["tts_voice"]=="gVzwmdZzRgBrNjXaTmi5" else ("Jeddawi — Saudi Male" if result["tts_voice"]=="yXEnnEln9armDCyhkXcA" else result["tts_voice"])
+    old_female={"gVzwmdZzRgBrNjXaTmi5"}
+    if result.get("saudi_voice_auto",True) and (result["tts_voice"].lower() in stock_english or result["tts_voice"] in old_saudi_male or result["tts_voice"] in old_female):
+        result["tts_voice"] = "QsV9PCczMIklRM6xLPAS" if result["voice_gender"]=="أنثى" else "yXEnnEln9armDCyhkXcA"
+    result["tts_voice_label"] = "Heba Mansuri — Saudi Female" if result["voice_gender"]=="أنثى" and result["tts_voice"]=="QsV9PCczMIklRM6xLPAS" else ("Jeddawi — Saudi Male" if result["tts_voice"]=="yXEnnEln9armDCyhkXcA" else result["tts_voice"])
     return result
