@@ -154,11 +154,17 @@ class RaceGame:
             print(f"RACE_LEAVE user={username} pid={os.getpid()} game={id(self)} reason={reason} phase={self.phase} players={len(self.players)} queued={len(self.waiting_next)}", flush=True)
         return removed
 
-    def boost(self, username, amount):
+    def boost(self, username, amount, instant_progress=0.0):
         with self.lock:
             p = self.players.get(str(username))
             if p:
-                p["boost"] = min(.30, p["boost"] + max(0.0, float(amount)))
+                p["boost"] = min(.45, p["boost"] + max(0.0, float(amount)))
+                # Make interactions feel immediate on screen instead of waiting
+                # for the next movement multiplier to become noticeable.
+                if self.phase == "racing" and p["finished_at"] is None and instant_progress > 0:
+                    p["progress"] = min(1.0, p["progress"] + float(instant_progress))
+                    if p["progress"] >= 1.0:
+                        p["finished_at"] = time.time()
 
     def _countdown(self):
         if len(self.players) >= 2:
@@ -220,7 +226,7 @@ class RaceGame:
             for p in self.players.values():
                 if p["finished_at"] is not None:
                     continue
-                p["boost"] = max(0.0, p["boost"] - dt * .06)
+                p["boost"] = max(0.0, p["boost"] - dt * .10)
                 jitter = random.uniform(.985, 1.015)
                 p["progress"] = min(1.0, p["progress"] + (dt / RACE_SECONDS) * p["pace"] * jitter * (1 + p["boost"]))
                 if p["progress"] >= 1:
@@ -527,7 +533,7 @@ HTML = r"""<!doctype html>
 .race-rail{position:absolute;left:43%;right:4.2%;top:50%;height:clamp(12px,1.35vh,17px);transform:translateY(-50%);border-radius:999px;background:#080d14;border:1px solid #2b384a;box-shadow:inset 0 2px 4px #0009;direction:ltr}
 .race-rail:before{content:"";position:absolute;inset:0;border-radius:inherit;background:repeating-linear-gradient(90deg,transparent 0 9%,rgba(173,197,218,.13) 9.2% 9.5%,transparent 9.7% 18%);opacity:.42}
 .rail-fill{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:inherit;background:linear-gradient(90deg,color-mix(in srgb,var(--player-color) 54%,transparent),var(--player-color));opacity:.57;transition:width 430ms cubic-bezier(.2,.8,.25,1);box-shadow:0 0 12px color-mix(in srgb,var(--player-color) 30%,transparent)}
-.vehicle{position:absolute;z-index:4;left:0;top:50%;width:clamp(47px,5.1vw,66px);height:auto;transform:translate(-50%,-50%);color:var(--player-color);filter:drop-shadow(0 4px 5px rgba(0,0,0,.55));transition:left 430ms cubic-bezier(.2,.8,.25,1);will-change:left}
+.vehicle{position:absolute;z-index:4;left:0;top:50%;width:clamp(47px,5.1vw,66px);height:auto;transform:translate(-50%,-50%);color:var(--player-color);filter:drop-shadow(0 4px 5px rgba(0,0,0,.55));transition:left 130ms linear;will-change:left}
 .vehicle svg{display:block;width:100%;height:auto;overflow:visible}.vehicle:after{content:"";position:absolute;left:13%;right:72%;top:48%;height:3px;border-radius:9px;background:linear-gradient(90deg,transparent,var(--player-color));opacity:.42;filter:blur(2px)}
 .finish-mark{position:absolute;z-index:3;right:-2px;top:50%;width:clamp(10px,1vw,14px);height:clamp(30px,4vh,46px);transform:translateY(-50%);border-radius:2px;background:repeating-conic-gradient(#e8edf3 0 25%,#17202b 0 50%) 50% / 8px 8px;box-shadow:0 0 9px rgba(208,230,246,.22)}
 .boost-flare{position:absolute;z-index:5;left:47%;top:50%;transform:translate(-50%,-50%) scale(.7);opacity:0;pointer-events:none;padding:5px 11px;border:1px solid #ffb66e66;border-radius:999px;background:#361f16;color:#ffd3a2;font-size:clamp(13px,1.4vw,17px);font-weight:900;white-space:nowrap}
@@ -884,7 +890,7 @@ HTML = r"""<!doctype html>
       liveEl.title = 'تعذر الوصول إلى خادم اللعبة';
       $('subtitle').textContent = 'جاري استعادة الاتصال باللعبة';
     }
-    setTimeout(poll, 450);
+    setTimeout(poll, 120);
   }
   poll();
 })();
@@ -933,15 +939,20 @@ def internal_tiktok_event():
         GAME._record_tiktok_event(kind, username)
         GAME.join(username, name)
         if kind == "FOLLOW":
-            GAME.boost(username, .10)
+            GAME.boost(username, .12, .018)
         elif kind == "LIKE":
             count = max(1, int(body.get("count", 1) or 1))
-            GAME.boost(username, min(.05, count * .002))
+            # TikTok commonly batches likes. Convert the batch into an immediate
+            # visible nudge plus a short boost, capped so one batch cannot teleport.
+            instant = min(.055, .004 + count * .0014)
+            GAME.boost(username, min(.12, .018 + count * .0035), instant)
         elif kind == "SHARE":
-            GAME.boost(username, .06)
+            GAME.boost(username, .09, .012)
         elif kind == "GIFT":
             diamonds = max(0, int(body.get("diamonds", 0) or 0))
-            GAME.boost(username, min(.22, .04 + math.log10(max(1, diamonds)) * .05))
+            gift_boost = min(.30, .06 + math.log10(max(1, diamonds)) * .06)
+            gift_jump = min(.11, .02 + math.log10(max(1, diamonds)) * .018)
+            GAME.boost(username, gift_boost, gift_jump)
     elif kind == "PRESENCE_LEAVE" and username:
         GAME._record_tiktok_event(kind, username)
         GAME.leave(username, reason="euler-presence")
