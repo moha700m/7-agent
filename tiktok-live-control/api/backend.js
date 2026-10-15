@@ -56,7 +56,7 @@ function saveSecretCookie(res, secrets, secret) {
 }
 
 module.exports = async function handler(req, res) {
-  const allowed = new Set(["status","events","test","start","stop","restart","preview","configure","presets","secret_status","health/details","metrics","metrics/reset","profiles","control","simulation/start","simulate","audio/events","audio/chunks","player/heartbeat","player_token","player_bootstrap","self-host/status","self-host/configure","self-host/new-topic","self-host/stop-topic","self-host/speak-now","self-host/pause","self-host/resume"]);
+  const allowed = new Set(["status","events","test","start","stop","restart","preview","configure","presets","secret_status","health/details","metrics","metrics/reset","profiles","control","simulation/start","simulate","audio/events","audio/chunks","player/heartbeat","player_token","player_bootstrap","self-host/status","self-host/configure","self-host/new-topic","self-host/stop-topic","self-host/speak-now","self-host/pause","self-host/resume","commentator/status","commentator/configure","commentator/speak-now"]);
   res.setHeader("Cache-Control", "no-store");
   const path = String(req.query.path || "");
   if (!allowed.has(path)) return res.status(400).json({ error: "مسار غير مسموح" });
@@ -65,7 +65,7 @@ module.exports = async function handler(req, res) {
   const token = process.env.CONTROL_TOKEN;
   if (!base || !token) return res.status(503).json({ error: "إعدادات الربط غير مكتملة" });
 
-  const readPaths = new Set(["status","events","presets","secret_status","health/details","metrics","profiles","audio/events","audio/chunks","player_token","player_bootstrap","self-host/status"]);
+  const readPaths = new Set(["status","events","presets","secret_status","health/details","metrics","profiles","audio/events","audio/chunks","player_token","player_bootstrap","self-host/status","commentator/status"]);
   if ((readPaths.has(path) && req.method !== "GET") || (!readPaths.has(path) && req.method !== "POST")) {
     return res.status(405).json({error:"طريقة غير مسموحة"});
   }
