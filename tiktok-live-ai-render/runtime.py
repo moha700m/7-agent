@@ -615,7 +615,14 @@ class HostRuntime:
 
     def commentator_status(self):
         with self.lock:
-            return dict(ok=True, **self.commentator.status(self.cfg))
+            cfg=copy.deepcopy(self.cfg)
+            running=self.running
+        self.commentator.ensure_running()
+        if running and cfg.get("race_commentator_enabled"):
+            age=time.time()-self.commentator.last_poll if self.commentator.last_poll else 999
+            if age>3:
+                self.commentator.probe()
+        return dict(ok=True, **self.commentator.status(cfg))
 
     def commentator_configure(self, data):
         allowed={"race_commentator_enabled","race_commentator_explain","race_commentator_min_gap","race_commentator_hype"}
@@ -627,7 +634,10 @@ class HostRuntime:
             payload["proactive_enabled"]=False
         result=self.configure(payload)
         if payload.get("race_commentator_enabled") is True:
+            self.commentator.ensure_running()
+            self.commentator.probe()
             self.commentator.request_speak_now()
+            result.update(self.commentator.status(self.cfg))
         return result
 
     def commentator_action(self, action):
