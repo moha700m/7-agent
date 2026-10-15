@@ -134,7 +134,7 @@ def test_hot_switch_preserves_connection_and_gender(host):
     host.start({},simulation=True,fixture=True)
     thread=host.responder_thread;generation=host.generation
     host.configure({'preset_id':'nora_live'})
-    assert host.cfg['tts_voice']=='jessica' and host.cfg['voice_gender']=='أنثى'
+    assert host.cfg['tts_voice']=='QsV9PCczMIklRM6xLPAS' and host.cfg['voice_gender']=='أنثى'
     assert host.responder_thread is thread and host.generation==generation
     assert host.cfg['persona']['name']=='نورة'
     with pytest.raises(ValueError):host.start({},simulation=True,fixture=True)
@@ -174,7 +174,7 @@ def test_stop_fences_inflight_result_and_blocks_second_worker(host,monkeypatch):
 def test_config_preserves_keys_and_applies_partial_controls(host):
     host.configure({'openrouter_key':'fixture-key','preset_id':'nora_live'})
     host.configure({'mood_override':'calm'})
-    assert host.cfg['openrouter_key']=='fixture-key' and host.cfg['tts_voice']=='jessica'
+    assert host.cfg['openrouter_key']=='fixture-key' and host.cfg['tts_voice']=='QsV9PCczMIklRM6xLPAS'
     assert host.cfg['mood_override']=='calm'
     host.configure({'openrouter_key':''});assert host.cfg['openrouter_key']=='fixture-key'
     assert 'fixture-key' not in str(host.status())
@@ -193,7 +193,7 @@ def test_api_compatibility_auth_and_audio_separation(monkeypatch,host):
     assert client.post('/api/simulate',headers=headers,json={'type':'comment','text':'هلا'}).status_code==200
     until(lambda:len(host.audio)>0)
     assert 'audio_b64' not in str(client.get('/api/events',headers=headers).json)
-    assert client.post('/api/configure',headers=headers,json={'preset_id':'nora_live'}).json['voice']=='jessica'
+    assert client.post('/api/configure',headers=headers,json={'preset_id':'nora_live'}).json['voice']=='QsV9PCczMIklRM6xLPAS'
     assert client.post('/api/configure',headers=headers,json=[]).status_code==400
     assert client.post('/api/configure',headers=headers,json={'persona':[]}).status_code==400
     assert client.post('/api/stop',headers=headers,json={}).status_code==200
@@ -288,8 +288,8 @@ def test_saudi_speech_normalizer_and_voice_upgrade():
     assert "عشرين" in text and "كويك سكوب" in text
     assert safe_spoken_name("user_123456789")==""
     cfg=build_config({'preset_id':'abu_abed','tts_voice':'brian','model':'google/gemini-2.5-flash'})
-    assert cfg['tts_voice']=='s83SAGdFTflAwJcAV81K'
-    assert cfg['tts_voice_label'].startswith('Adeeb')
+    assert cfg['tts_voice']=='yXEnnEln9armDCyhkXcA'
+    assert cfg['tts_voice_label'].startswith('Jeddawi')
     assert cfg['model']=='google/gemini-3.8-flash'
     assert cfg['tts_streaming'] is True
 
@@ -302,3 +302,54 @@ def test_audio_chunks_requires_active_player(host):
     host.heartbeat({'player_id':'p1'})
     row=host.audio_chunks(7,0,'p1')
     assert row['active'] and row['chunks'][0]['seq']==1 and row['sample_rate']==24000
+
+
+def test_queue_prunes_expired_even_before_take():
+    now=[1000.0]
+    q=EventQueue(clock=lambda:now[0])
+    old_join={'type':'join','received_at':970.0}
+    live_gift={'type':'gift','received_at':999.0,'gift_value':20,'classification':{'priority':50}}
+    q.put(old_join);q.put(live_gift)
+    expired=q.prune_expired()
+    assert old_join in expired
+    assert q.size()==1
+    event,_=q.take()
+    assert event is live_gift
+
+
+def test_stuck_audio_watchdog_releases_queue_without_replay(host):
+    host.start({'behavior':{'global_cooldown':0}},simulation=True,fixture=True)
+    host.heartbeat({'player_id':'p1','pcm_streaming':True})
+    audio_id=777
+    host.audio.append({'id':audio_id,'created_at':time.time(),'audio_b64':'AA==','mime':'audio/wav','character':'test','epoch':host.audio_epoch,'event_type':'comment','stream':False})
+    host.pending_audio=(audio_id,time.time())
+    first=host.heartbeat({'player_id':'p1','busy':True,'current_id':audio_id,'pcm_streaming':True})
+    assert first['active'] and not first['force_reset']
+    host.player['current_since']=time.time()-26
+    before=host.audio_epoch
+    recovered=host.heartbeat({'player_id':'p1','busy':True,'current_id':audio_id,'pcm_streaming':True})
+    assert recovered['force_reset']
+    assert host.pending_audio is None
+    assert host.player['busy'] is False and host.player['current_id'] is None
+    assert host.audio_epoch==before+1
+    assert not any(x['id']==audio_id for x in host.audio)
+
+
+def test_audio_event_claim_prevents_replay_after_player_takeover(monkeypatch,host):
+    import app
+    monkeypatch.setenv('CONTROL_TOKEN','unit-control')
+    monkeypatch.setattr(app,'HOST',host)
+    headers={'X-Control-Token':'unit-control'}
+    client=app.app.test_client()
+    host.start({'behavior':{'global_cooldown':0}},simulation=True,fixture=True)
+    host.heartbeat({'player_id':'p1'})
+    host.ingest({'type':'comment','username':'u','text':'هلا'})
+    until(lambda:len(host.audio)>0)
+    row_id=host.audio[-1]['id']
+    r1=client.get('/api/audio/events?since=0&player_id=p1',headers=headers).json
+    assert [x['id'] for x in r1['events']]==[row_id]
+    with host.lock:
+        host.player['heartbeat']=0
+    host.heartbeat({'player_id':'p2'})
+    r2=client.get('/api/audio/events?since=0&player_id=p2',headers=headers).json
+    assert r2['events']==[]
