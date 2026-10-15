@@ -84,6 +84,7 @@ class HostRuntime:
     def configure(self, data):
         with self.lock:
             merged = copy.deepcopy(self.cfg)
+            previous_profile = merged["topic_profile"]
             changed = data.get("preset_id") and data["preset_id"] != merged["preset_id"]
             if changed:
                 for key in ("persona","behavior","tts_voice","voice_gender","tts_prefix"):
@@ -101,7 +102,7 @@ class HostRuntime:
             self.pending_audio = None
             if changed:
                 self.auto.last_switch = time.time()
-            if self.cfg.get("allow_profile_persona") and self.cfg["personality_mode"]=="manual" and "topic_profile" in data and not data.get("preset_id"):
+            if self.cfg.get("allow_profile_persona") and self.cfg["personality_mode"]=="manual" and self.cfg["topic_profile"]!=previous_profile and not changed:
                 self.cfg = build_config({**self.cfg,"preset_id":PROFILES[self.cfg["topic_profile"]]["recommended"],"persona":{},"behavior":{},"tts_voice":""})
             self.publish("status",f'الشخصية: {self.cfg["persona"]["name"]} | الصوت: {self.cfg["tts_voice"]}')
             return self.status()

@@ -202,3 +202,12 @@ def test_single_tiktok_connector_cancellation(host,monkeypatch):
     old=host.client
     host.configure({'preset_id':'nora_live'});assert host.client is old
     host.stop();assert not host.tiktok_thread.is_alive() and host.tiktok=='OFFLINE'
+
+
+def test_profile_changes_persona_only_with_explicit_permission(host):
+    host.configure({'topic_profile':'valorant','preset_id':'cyber_gamer'})
+    assert host.cfg['preset_id']=='cyber_gamer'
+    host.configure({'topic_profile':'chatting','preset_id':'cyber_gamer','allow_profile_persona':True})
+    assert host.cfg['preset_id']=='majlis_friend'
+    host.configure({'topic_profile':'competitive','preset_id':'nora_live','allow_profile_persona':True})
+    assert host.cfg['preset_id']=='nora_live'  # explicit character selection wins
