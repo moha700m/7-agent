@@ -17,6 +17,7 @@ from queue_manager import EventQueue
 from behavior import CrowdEngine, MoodEngine, VoiceStyleEngine, AutoPersonality, ProactiveHost, PROFILES
 from providers import ProviderManager
 from self_host import SelfHostEngine
+from race_commentator import RaceCommentator
 from tiktok_client import run_client
 
 
@@ -57,6 +58,7 @@ class HostRuntime:
         self.auto, self.proactive = AutoPersonality(), ProactiveHost()
         self.self_host = SelfHostEngine()
         self.providers = ProviderManager(self.metrics)
+        self.commentator = RaceCommentator(self)
         self.stop_event = threading.Event()
         self.responder_thread = self.tiktok_thread = None
         self.client = self.client_loop = self.connection_task = None
@@ -472,6 +474,7 @@ class HostRuntime:
             self.recent_replies.clear()
             self.metrics.reset()
             self.self_host.reset()
+            self.commentator.reset()
             self.last_event=self.last_spoken=time.time()
             self.last_join=0; self.like_bucket=0
             self.pending_audio=None
@@ -581,7 +584,8 @@ class HostRuntime:
                 memory_users=len(self.memory.users),
                 tts_streaming=bool(self.cfg.get("tts_streaming")),player_streaming_capable=bool(self.player.get("pcm_streaming")),
                 tts_voice_label=self.cfg.get("tts_voice_label",self.cfg["tts_voice"]),
-                stream_audio_active=bool(self.pending_audio and self.pending_audio[0] in self.audio_streams),**self.self_host.status(self.cfg))
+                stream_audio_active=bool(self.pending_audio and self.pending_audio[0] in self.audio_streams),
+                **self.self_host.status(self.cfg), **self.commentator.status(self.cfg))
 
     def self_host_status(self):
         with self.lock:return dict(ok=True,**self.self_host.status(self.cfg),metrics=self.self_host.metric_snapshot())
@@ -608,6 +612,28 @@ class HostRuntime:
 
     def self_host_metrics(self):
         return {**self.metrics.snapshot(),**self.self_host.metric_snapshot()}
+
+    def commentator_status(self):
+        with self.lock:
+            return dict(ok=True, **self.commentator.status(self.cfg))
+
+    def commentator_configure(self, data):
+        allowed={"race_commentator_enabled","race_commentator_explain","race_commentator_min_gap","race_commentator_hype"}
+        payload={k:v for k,v in data.items() if k in allowed}
+        if payload.get("race_commentator_enabled") is True:
+            # One autonomous voice: race commentary replaces free-form self-host chatter,
+            # while real viewer comments/gifts still use the same voice pipeline.
+            payload["self_host_enabled"]=False
+            payload["proactive_enabled"]=False
+        result=self.configure(payload)
+        if payload.get("race_commentator_enabled") is True:
+            self.commentator.request_speak_now()
+        return result
+
+    def commentator_action(self, action):
+        if action!="speak-now":
+            raise ValueError("إجراء المعلق غير مدعوم")
+        return dict(ok=True, **self.commentator.request_speak_now())
 
     def health(self):
         with self.lock:
