@@ -151,11 +151,17 @@ async function applyRaceCommentator(){
     setField("proactive_enabled",false);
   }
   try{
+    if(data.race_commentator_enabled && !currentStatus.running){
+      if($("tiktok") && !val("tiktok")) setField("tiktok","minichat990");
+      addLog("جاري تشغيل وكيل الصوت للمعلّق...");
+      currentStatus=await api("start","POST",payload());
+    }
     const j=await api("commentator/configure","POST",data);
     renderHostStatus(j);
-    addLog(data.race_commentator_enabled?"تم تشغيل معلّق السباق بنفس الصوت الحالي":"تم إيقاف معلّق السباق");
+    addLog(data.race_commentator_enabled?"المعلّق شغال: يقرأ السباق ويستخدم نفس الصوت الحالي":"تم إيقاف معلّق السباق");
     saveSettings(true);
-  }catch(e){addLog("تعذر تطبيق المعلّق: "+e.message,"error");}
+    setTimeout(pollStatus,700);
+  }catch(e){addLog("تعذر تشغيل المعلّق: "+e.message,"error");}
 }
 async function raceCommentatorSpeakNow(){
   try{await api("commentator/speak-now","POST",{});addLog("طلبت من المعلّق تعليقًا فوريًا");pollStatus();}
