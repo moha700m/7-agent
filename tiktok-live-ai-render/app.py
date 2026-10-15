@@ -129,7 +129,7 @@ def api_presets():
         p=dict(resolved_preset(k),tts_model='elevenlabs/eleven-v4-turbo',voice_language='ar',
             mood_default=CHARACTER_PRESETS[k]['mood_default'])
         if p.get('voice_gender')=='أنثى':
-            p['voice']='gVzwmdZzRgBrNjXaTmi5';p['voice_label']='Layan — Saudi'
+            p['voice']='QsV9PCczMIklRM6xLPAS';p['voice_label']='Heba Mansuri — Saudi Female'
         else:
             p['voice']='yXEnnEln9armDCyhkXcA';p['voice_label']='Jeddawi — Saudi Male'
         rows.append(p)
