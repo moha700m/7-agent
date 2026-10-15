@@ -210,6 +210,7 @@ class RaceGame:
                         self.live = "LIVE"
                         self.room_id = client.room_id
                         self.last_error = ""
+                    print(f"RACE_TIKTOK_CONNECTED room={client.room_id}", flush=True)
 
                 @client.on(DisconnectEvent)
                 async def on_disconnect(_):
@@ -259,11 +260,12 @@ class RaceGame:
                 loop.run_until_complete(connect())
             except asyncio.CancelledError:
                 pass
-            except Exception:
+            except Exception as exc:
                 with self.lock:
                     self.live = "RECONNECTING"
                     self.last_error = "تعذر اتصال TikTok؛ إعادة المحاولة تلقائيًا"
                     self.reconnects += 1
+                print(f"RACE_TIKTOK_RECONNECT {type(exc).__name__}", flush=True)
             finally:
                 if client:
                     try:
