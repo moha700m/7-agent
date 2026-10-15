@@ -106,10 +106,22 @@ def api_events():
 @app.get('/api/audio/events')
 def api_audio_events():
     since=int(request.args.get('since','0'))
+    player_id=request.args.get('player_id','')
     with HOST.lock:
-        active=request.args.get('player_id')==HOST.player['id'] and time.time()-HOST.player['heartbeat']<10
-        rows=[x for x in HOST.audio if x['id']>since and time.time()-x['created_at']<60 and HOST.pending_audio and x['id']==HOST.pending_audio[0]] if active and HOST.running and not HOST.muted else []
-        if request.args.get('initialize')=='1': rows=[]
+        active=player_id==HOST.player['id'] and time.time()-HOST.player['heartbeat']<10
+        rows=[]
+        if active and HOST.running and not HOST.muted and request.args.get('initialize')!='1':
+            for row in HOST.audio:
+                if row['id']<=since or time.time()-row['created_at']>=60 or not HOST.pending_audio or row['id']!=HOST.pending_audio[0]:
+                    continue
+                claimed=row.get('claimed_by')
+                if claimed and claimed!=player_id:
+                    continue
+                if not claimed:
+                    row['claimed_by']=player_id
+                    row['claimed_at']=time.time()
+                rows.append(row)
+                break
         return jsonify(events=rows[:1],latest_id=HOST.event_seq,boot_id=HOST.boot_id,epoch=HOST.audio_epoch,active=active)
 
 
