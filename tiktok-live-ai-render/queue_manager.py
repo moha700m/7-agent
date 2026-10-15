@@ -51,6 +51,13 @@ class EventQueue:
         ttl = 90 if event.get("gift_value",0)>=100 else self.TTL.get(event["type"],15)
         return self.clock()-event["received_at"] > ttl
 
+    def prune_expired(self):
+        with self.lock:
+            expired=[e for e in self.items if self.expired(e)]
+            if expired:
+                self.items=[e for e in self.items if e not in expired]
+            return expired
+
     def take(self):
         with self.lock:
             expired = [e for e in self.items if self.expired(e)]
