@@ -105,6 +105,15 @@ module.exports = async function handler(req, res) {
     playerAllowed = playerSignature && playerSignature.length === expected.length && crypto.timingSafeEqual(Buffer.from(playerSignature),Buffer.from(expected)) && claims.exp > Date.now();
   } catch {}
   const playerPaths = new Set(["audio/events","player/heartbeat"]);
+  // Keep an already-open TikTok LIVE Studio browser source working after upgrades.
+  // Only same-origin requests originating from player.html get this narrow player access.
+  let sameOriginPlayer = false;
+  try {
+    const ref = req.headers.referer ? new URL(req.headers.referer) : null;
+    const expectedHost = req.headers["x-forwarded-host"] || req.headers.host;
+    sameOriginPlayer = !!ref && ref.host === expectedHost && /\/player\.html$/.test(ref.pathname);
+  } catch {}
+  if (playerPaths.has(path) && sameOriginPlayer) playerAllowed = true;
   const incoming = req.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {};
   const candidate = typeof incoming.openrouter_key === "string" ? incoming.openrouter_key.trim() : "";
   let operator = !!savedSecrets.openrouter_key;
