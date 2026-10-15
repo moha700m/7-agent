@@ -1,6 +1,6 @@
 /* Dashboard extensions. LIVE audio is intentionally absent from this file. */
 const hostIds=["personality_mode","topic_profile","mood_override","persona_min_duration","idle_threshold","max_proactive_per_10min","memory_ttl_hours","proactive_enabled","crowd_enabled","allow_profile_persona","secondary_model","third_model","tts_provider","tts_fallback"];
-let currentStatus={};
+let currentStatus={},TOPIC_PROFILES={};
 const statFields={mood:"Current Mood",crowd_state:"Crowd State",queue_size:"Queue Size",current_ai_model:"AI Model",current_tts_provider:"TTS Provider",latency:"Latency",comments_per_min:"Comments/min",gifts_per_min:"Gifts/min",replies_per_min:"Replies/min",suppressed_spam:"Suppressed spam",deduped_messages:"Deduped messages",reconnect_attempts:"Reconnect attempts",player_connected:"Player",paused:"Responses",last_error:"Last error"};
 $("advancedStats").innerHTML=Object.entries(statFields).map(([key,label])=>'<div class="stat"><b>'+esc(label)+'</b><span id="host_'+key+'">—</span></div>').join("");
 function hostPayload(){
@@ -11,6 +11,7 @@ function hostPayload(){
 async function loadHostOptions(){
   try{
     const j=await api("profiles");
+    TOPIC_PROFILES=Object.fromEntries(j.profiles.map(p=>[p.id,p]));
     $("topic_profile").innerHTML=j.profiles.map(p=>'<option value="'+esc(p.id)+'">'+esc(p.label)+'</option>').join("");
     $("mood_override").innerHTML='<option value="auto">Auto</option>'+j.moods.map(m=>'<option>'+esc(m)+'</option>').join("");
     let saved={};try{saved=JSON.parse(localStorage.getItem("cyber-live-settings-v4")||"{}");}catch{}
@@ -83,3 +84,11 @@ async function simulate(type){
 for(const type of ["comment","join","gift","follow","share","like","burst"]){const b=document.createElement("button");b.className="secondary";b.textContent="Fake "+type;b.onclick=()=>simulate(type);$("simulationButtons").append(b);}
 async function pollHealth(){try{$("healthDetails").textContent=JSON.stringify(await api("health/details"),null,2);}catch(e){$("healthDetails").textContent=e.message;}}
 pollHealth();setInterval(pollHealth,5000);
+
+$("topic_profile").addEventListener("change",()=>{
+  const profile=TOPIC_PROFILES[val("topic_profile")];if(!profile)return;
+  if(val("allow_profile_persona")&&val("personality_mode")==="manual"&&CHARACTER_PRESETS[profile.recommended]){
+    setField("broadcast_mode",profile.recommended);applyPresetFields(CHARACTER_PRESETS[profile.recommended]);
+  }
+  setField("game_or_topic",profile.label);setField("stream_context",profile.context);saveSettings(true);
+});
