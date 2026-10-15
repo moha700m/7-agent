@@ -295,10 +295,9 @@ class RaceGame:
                     params = {
                         "uniqueId": TIKTOK_USERNAME,
                         "apiKey": EULER_API_KEY,
-                        "schemaVersion": "v2",
+                        "features.schemaVersion": "v2",
                         "features.bundleEvents": "true",
                         "features.syntheticPresence": "true",
-                        "features.syntheticPresenceLeaveAfter": str(PRESENCE_LEAVE_AFTER),
                         "features.normalizeUniqueId": "true",
                     }
                     url = "wss://ws.eulerstream.com?" + urlencode(params)
@@ -312,7 +311,7 @@ class RaceGame:
                         with self.lock:
                             self.presence_connected = True
                             self.presence_mode = "euler-synthetic-presence"
-                        print(f"RACE_PRESENCE_CONNECTED leave_after={PRESENCE_LEAVE_AFTER}", flush=True)
+                        print("RACE_PRESENCE_CONNECTED syntheticPresence=true", flush=True)
 
                         async for raw in ws:
                             if isinstance(raw, bytes):
