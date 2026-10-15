@@ -352,6 +352,17 @@ async function playNext(){
   a.onended=()=>{playing=false;playNext()};a.onerror=()=>{playing=false;playNext()};
   try{await a.play()}catch{playing=false;addLog("المتصفح منع الصوت التلقائي؛ اضغط داخل الصفحة ثم جرّب.","error")}
 }
+async function copyPlayerLink(){
+  const url=location.origin+"/player.html?v=20261015-3";
+  $("playerLink").textContent=url;
+  try{
+    await navigator.clipboard.writeText(url);
+    addLog("تم نسخ رابط مشغل LIVE — حطه في Browser Source داخل TikTok LIVE Studio");
+  }catch{
+    addLog("انسخ رابط المشغل الظاهر وحطه في TikTok LIVE Studio");
+  }
+}
+
 async function testAll(){
   saveSettings(true);
   addLog("جاري فحص TikTok وOpenRouter والصوت...");
@@ -381,6 +392,13 @@ async function pollStatus(){
     $("stRoom").textContent=j.room_id||"—";
     $("stCharacter").textContent=j.agent_name||j.preset_label||"—";
     $("stVoice").textContent=j.tts_voice?(j.tts_voice+" · "+(j.voice_gender||"")):"—";
+    if($("playerLink")){
+      if(j.running&&!j.player_connected){
+        $("playerLink").innerHTML="<b style='color:var(--bad)'>مشغل الصوت غير متصل.</b> استخدم رابط: "+esc(location.origin+"/player.html?v=20261015-3");
+      }else if(j.player_connected){
+        $("playerLink").innerHTML="<span class='ok'>✓ مشغل LIVE متصل وجاهز للصوت</span>";
+      }
+    }
     $("liveBadge").textContent=j.tiktok==="LIVE"?"● LIVE متصل":"● "+(j.tiktok||"غير متصل");
     $("liveBadge").style.color=j.tiktok==="LIVE"?"var(--ok)":"var(--warn)";
   }catch{}
