@@ -124,8 +124,16 @@ def api_heartbeat(): return jsonify(HOST.heartbeat(body()))
 
 @app.get('/api/presets')
 def api_presets():
-    return jsonify(ok=True,presets=[dict(resolved_preset(k),tts_model='elevenlabs/eleven-v4-turbo',voice_language='ar',
-        mood_default=CHARACTER_PRESETS[k]['mood_default']) for k in CHARACTER_PRESETS])
+    rows=[]
+    for k in CHARACTER_PRESETS:
+        p=dict(resolved_preset(k),tts_model='elevenlabs/eleven-v4-turbo',voice_language='ar',
+            mood_default=CHARACTER_PRESETS[k]['mood_default'])
+        if p.get('voice_gender')=='أنثى':
+            p['voice']='gVzwmdZzRgBrNjXaTmi5';p['voice_label']='Layan — Saudi Najdi'
+        else:
+            p['voice']='s83SAGdFTflAwJcAV81K';p['voice_label']='Adeeb — Saudi Natural'
+        rows.append(p)
+    return jsonify(ok=True,presets=rows)
 
 
 @app.get('/api/profiles')
