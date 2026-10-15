@@ -109,7 +109,7 @@ async function restartAgent(){try{await api("restart","POST",payload());addLog("
 async function resetMetrics(){try{await api("metrics/reset","POST",{});pollStatus();}catch(e){addLog(e.message,"error");}}
 async function copyPlayerLink(){
   try{
-    const j=await api("player_token");const url=new URL("player.html?v=20261015-6",location.href);url.hash="token="+encodeURIComponent(j.token);
+    const j=await api("player_token");const url=new URL("player.html?v=20261015-7",location.href);url.hash="token="+encodeURIComponent(j.token);
     $("playerLink").textContent=url.href;
     if(navigator.clipboard){await navigator.clipboard.writeText(url.href);addLog("تم نسخ رابط المشغل، صالح لمدة 30 يومًا. احفظه لنفسك.");}
   }catch(e){addLog(e.message,"error");}
