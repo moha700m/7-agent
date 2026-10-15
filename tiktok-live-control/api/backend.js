@@ -56,7 +56,7 @@ function saveSecretCookie(res, secrets, secret) {
 }
 
 module.exports = async function handler(req, res) {
-  const allowed = new Set(["status","events","test","start","stop","restart","preview","configure","presets","secret_status","health/details","metrics","metrics/reset","profiles","control","simulation/start","simulate","audio/events","player/heartbeat","player_token"]);
+  const allowed = new Set(["status","events","test","start","stop","restart","preview","configure","presets","secret_status","health/details","metrics","metrics/reset","profiles","control","simulation/start","simulate","audio/events","player/heartbeat","player_token","player_bootstrap"]);
   res.setHeader("Cache-Control", "no-store");
   const path = String(req.query.path || "");
   if (!allowed.has(path)) return res.status(400).json({ error: "مسار غير مسموح" });
@@ -65,7 +65,7 @@ module.exports = async function handler(req, res) {
   const token = process.env.CONTROL_TOKEN;
   if (!base || !token) return res.status(503).json({ error: "إعدادات الربط غير مكتملة" });
 
-  const readPaths = new Set(["status","events","presets","secret_status","health/details","metrics","profiles","audio/events","player_token"]);
+  const readPaths = new Set(["status","events","presets","secret_status","health/details","metrics","profiles","audio/events","player_token","player_bootstrap"]);
   if ((readPaths.has(path) && req.method !== "GET") || (!readPaths.has(path) && req.method !== "POST")) {
     return res.status(405).json({error:"طريقة غير مسموحة"});
   }
@@ -86,6 +86,16 @@ module.exports = async function handler(req, res) {
   }
 
   const sign = value => crypto.createHmac("sha256", token).update(value).digest("base64url");
+  if (path === "player_bootstrap") {
+    // Public, player-only capability. It cannot call operator/control endpoints.
+    // This keeps the plain player.html URL working inside TikTok LIVE Studio.
+    const claims = Buffer.from(JSON.stringify({
+      exp: Date.now() + 24 * 60 * 60 * 1000,
+      nonce: crypto.randomBytes(12).toString("hex"),
+      scope: "player"
+    })).toString("base64url");
+    return res.status(200).json({token:claims+"."+sign("player:"+claims),expires_hours:24});
+  }
   const playerCapability = String(req.headers["x-player-token"] || "");
   const [playerPayload, playerSignature] = playerCapability.split(".");
   let playerAllowed = false;
