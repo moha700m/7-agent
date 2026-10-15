@@ -184,6 +184,18 @@ def api_self_host_pause(): return jsonify(HOST.self_host_action('pause'))
 def api_self_host_resume(): return jsonify(HOST.self_host_action('resume'))
 
 
+@app.get('/api/commentator/status')
+def api_commentator_status(): return jsonify(HOST.commentator_status())
+
+
+@app.post('/api/commentator/configure')
+def api_commentator_configure(): return jsonify(HOST.commentator_configure(body()))
+
+
+@app.post('/api/commentator/speak-now')
+def api_commentator_speak_now(): return jsonify(HOST.commentator_action('speak-now'))
+
+
 @app.post('/api/metrics/reset')
 def api_reset():
     HOST.metrics.reset()
