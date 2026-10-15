@@ -65,7 +65,10 @@ def run_client(host, username, stop):
                 client.add_listener(cls, callback_factory(kind))
 
             async def connect():
-                await client.connect(process_connect_events=False)
+                # connect() in TikTokLive 7 calls run_until_complete during cancellation.
+                # Own cancellation here by awaiting the public start() task directly.
+                socket_task = await client.start(process_connect_events=False)
+                await socket_task
 
             with host.lock:
                 host.connection_task = loop.create_task(connect())

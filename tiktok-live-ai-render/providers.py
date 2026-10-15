@@ -88,7 +88,10 @@ def test_vibi(key):
 def tiktok_live_check(username):
     async def _check():
         client = TikTokLiveClient(unique_id=f"@{username}")
-        return await client.is_live()
+        try:
+            return await client.is_live()
+        finally:
+            await client.close()
     return asyncio.run(_check())
 
 

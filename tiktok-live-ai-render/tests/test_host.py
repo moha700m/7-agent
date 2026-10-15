@@ -192,7 +192,7 @@ def test_single_tiktok_connector_cancellation(host,monkeypatch):
         def __init__(self,**kw):made.append(self)
         def on(self,event):return lambda f:f
         def add_listener(self,*a):pass
-        async def connect(self,**kw):await asyncio.Event().wait()
+        async def start(self,**kw):return asyncio.create_task(asyncio.Event().wait())
         async def disconnect(self,**kw):pass
     monkeypatch.setattr(tiktok_client,'TikTokLiveClient',Client)
     host.start({'tiktok':'testuser','openrouter_key':'fixture-key'})
