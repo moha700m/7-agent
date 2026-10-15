@@ -173,7 +173,7 @@ def openrouter_speak(text, cfg=None):
         "stability":style.get("stability",cfg.get("voice_stability",.5)),
         "similarity_boost":cfg.get("voice_similarity",.75),
     }
-    if voice_id=="yXEnnEln9armDCyhkXcA":
+    if voice_id in ("yXEnnEln9armDCyhkXcA","QsV9PCczMIklRM6xLPAS"):
         voice_settings["stability"]=max(.62,float(voice_settings["stability"]))
         voice_settings["similarity_boost"]=max(.82,float(voice_settings["similarity_boost"]))
     if "eleven-v4" not in model:
@@ -212,7 +212,7 @@ def openrouter_stream_speak(text, cfg, on_chunk):
     style=cfg.get("voice_style",{})
     stream_stability=style.get("stability",cfg.get("voice_stability",.5))
     stream_similarity=cfg.get("voice_similarity",.75)
-    if voice_id=="yXEnnEln9armDCyhkXcA":
+    if voice_id in ("yXEnnEln9armDCyhkXcA","QsV9PCczMIklRM6xLPAS"):
         stream_stability=max(.62,float(stream_stability))
         stream_similarity=max(.82,float(stream_similarity))
     body={
