@@ -124,7 +124,7 @@ function playNext(){
 async function poll(){
   try{
     const sentFinished=finishedId;
-    const hb=await api("player/heartbeat",{player_id:playerId,boot_id:boot,busy,queue_size:queue.length,current_id:current?.id||null,finished_id:sentFinished,failed,...playbackChanges});
+    const hb=await api("player/heartbeat",{player_id:playerId,boot_id:boot,busy,queue_size:queue.length,current_id:current?.id||null,finished_id:sentFinished,failed,pcm_streaming:true,...playbackChanges});
     playbackChanges={};if(sentFinished===finishedId){finishedId=null;failed=false;}
     active=hb.active;
     if(!active){resetAudio();status.textContent="مشغل آخر مسؤول عن صوت البث";return;}
