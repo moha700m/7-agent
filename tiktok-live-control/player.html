@@ -52,7 +52,8 @@ function finish(item,error=false){
   item.finished=true;
   clearTimeout(retryTimer);clearTimeout(watchdog);clearTimeout(streamTimer);clearTimeout(finishTimer);
   audio.onended=audio.onerror=null;audio.pause();if(item.url)URL.revokeObjectURL(item.url);
-  finishedId=item.id;failed=error;current=null;busy=false;pcmSources=[];playNext();
+  if(!item.serverAcked){finishedId=item.id;failed=error;}
+  current=null;busy=false;pcmSources=[];playNext();
 }
 async function tryPlay(item){
   if(current!==item||!active)return;
@@ -113,6 +114,14 @@ async function pollChunks(item){
     status.textContent="LIVE • realtime • "+(item.character||"");
     if(d.failed){item.streamFailed=true;}
     if(d.done && (item.streamSeq||0)>=Number(d.latest_seq||0)){
+      // Ack the backend as soon as every PCM chunk is safely in this player.
+      // Local playback remains busy until scheduledEnd, so the next clip can be prepared
+      // server-side without overlapping or replaying the current speech.
+      if(!item.serverAcked){
+        item.serverAcked=true;
+        finishedId=item.id;
+        failed=!!item.streamFailed;
+      }
       const ms=Math.max(30,((item.scheduledEnd||pcmCtx.currentTime)-pcmCtx.currentTime)*1000+80);
       finishTimer=setTimeout(()=>finish(item,!!item.streamFailed),ms);return;
     }
@@ -133,7 +142,8 @@ function playNext(){
 async function poll(){
   try{
     const sentFinished=finishedId;
-    const hb=await api("player/heartbeat",{player_id:playerId,boot_id:boot,busy,queue_size:queue.length,current_id:current?.id||null,finished_id:sentFinished,failed,pcm_streaming:pcmReady,...playbackChanges});
+    const serverBusy=!!(busy&&current&&!current.serverAcked);
+    const hb=await api("player/heartbeat",{player_id:playerId,boot_id:boot,busy:serverBusy,queue_size:queue.length,current_id:serverBusy?current.id:null,finished_id:sentFinished,failed,pcm_streaming:pcmReady,...playbackChanges});
     playbackChanges={};if(sentFinished===finishedId){finishedId=null;failed=false;}
     active=hb.active;
     if(hb.force_reset){
