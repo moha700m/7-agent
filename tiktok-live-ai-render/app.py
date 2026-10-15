@@ -178,8 +178,9 @@ class RaceGame:
             else:
                 remaining = max(0, math.ceil(RESULT_SECONDS - (now - self.phase_started)))
             leaders = sorted(self.scores.values(), key=lambda x: (x["points"], x["wins"]), reverse=True)[:5]
+            effective_live = "LIVE" if self.room_id else self.live
             return dict(
-                ok=True, live=self.live, username=TIKTOK_USERNAME, room_id=self.room_id,
+                ok=True, live=effective_live, username=TIKTOK_USERNAME, room_id=self.room_id,
                 phase=self.phase, round=self.round, remaining=remaining,
                 players=players, player_count=len(players), waiting_next=len(self.waiting_next),
                 winners=self.winners, leaderboard=leaders, max_players=MAX_PLAYERS,
@@ -225,6 +226,7 @@ class RaceGame:
                 async def on_disconnect(_):
                     with self.lock:
                         self.live = "RECONNECTING"
+                        self.room_id = None
 
                 @client.on(JoinEvent)
                 async def on_join(event):
@@ -666,7 +668,7 @@ HTML = r"""<!doctype html>
     else $('phaseDetail').textContent = 'الجولة التالية بعد ' + (Number(snapshot.remaining) || 1) + ' ث';
 
     const live = String(snapshot.live || 'RECONNECTING').toUpperCase();
-    const isLive = live === 'LIVE';
+    const isLive = live === 'LIVE' || Boolean(snapshot.room_id);
     const connecting = live === 'CONNECTING';
     const offline = live === 'OFFLINE';
     liveEl.dataset.status = isLive ? 'connected' : connecting ? 'connecting' : offline ? 'offline' : 'reconnecting';
