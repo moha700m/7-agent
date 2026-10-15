@@ -113,6 +113,11 @@ def api_audio_events():
         return jsonify(events=rows[:1],latest_id=HOST.event_seq,boot_id=HOST.boot_id,epoch=HOST.audio_epoch,active=active)
 
 
+@app.get('/api/audio/chunks')
+def api_audio_chunks():
+    return jsonify(HOST.audio_chunks(request.args.get('audio_id','0'),request.args.get('since','0'),request.args.get('player_id','')))
+
+
 @app.post('/api/player/heartbeat')
 def api_heartbeat(): return jsonify(HOST.heartbeat(body()))
 

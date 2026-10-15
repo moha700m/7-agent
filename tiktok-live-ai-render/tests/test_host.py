@@ -1,3 +1,4 @@
+from collections import deque
 import os
 import sys
 import threading
@@ -15,6 +16,7 @@ from intelligence import CommentClassifier, SemanticDeduplicator, PriorityEngine
 from queue_manager import EventQueue
 from behavior import CrowdEngine, MoodEngine, AutoPersonality, ProactiveHost, VoiceStyleEngine
 from self_host import SelfHostEngine, TOPIC_BANK
+from speech_normalizer import normalize_saudi_speech, safe_spoken_name
 from providers import ProviderManager
 from tiktok_client import backoff, run_client
 
@@ -278,3 +280,25 @@ def test_runtime_self_host_fixture_audio(host):
     until(lambda:host.metrics.snapshot()['self_host_lines']>=1)
     assert host.audio and host.audio[-1]['event_type']=='self_host'
     assert host.self_host_status()['current_topic']
+
+
+def test_saudi_speech_normalizer_and_voice_upgrade():
+    text=normalize_saudi_speech("COD S&D على PC رقم 20، quick scope!")
+    assert "كود" in text and "سيرش أند ديستروي" in text and "بي سي" in text
+    assert "عشرين" in text and "كويك سكوب" in text
+    assert safe_spoken_name("user_123456789")==""
+    cfg=build_config({'preset_id':'abu_abed','tts_voice':'brian','model':'google/gemini-2.5-flash'})
+    assert cfg['tts_voice']=='s83SAGdFTflAwJcAV81K'
+    assert cfg['tts_voice_label'].startswith('Adeeb')
+    assert cfg['model']=='google/gemini-3.8-flash'
+    assert cfg['tts_streaming'] is True
+
+
+def test_audio_chunks_requires_active_player(host):
+    host.start({'behavior':{'global_cooldown':0}},simulation=True,fixture=True)
+    host.audio_streams[7]=dict(seq=1,chunks=deque([{'seq':1,'audio_b64':'AA=='}]),done=False,failed=False,sample_rate=24000)
+    host.pending_audio=(7,time.time())
+    assert host.audio_chunks(7,0,'wrong')['active'] is False
+    host.heartbeat({'player_id':'p1'})
+    row=host.audio_chunks(7,0,'p1')
+    assert row['active'] and row['chunks'][0]['seq']==1 and row['sample_rate']==24000

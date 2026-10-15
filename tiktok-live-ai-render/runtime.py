@@ -44,6 +44,7 @@ class HostRuntime:
         self.reconnect_attempts = 0
         self.events = deque(maxlen=600)
         self.audio = deque(maxlen=12)
+        self.audio_streams = {}
         self.event_seq = 0
         self.queue = EventQueue()
         self.memory = ViewerMemoryManager()
@@ -101,6 +102,7 @@ class HostRuntime:
             self.config_version += 1
             self.audio_epoch += 1
             self.audio.clear()
+            self.audio_streams.clear()
             self.pending_audio = None
             if changed:
                 self.auto.last_switch = time.time()
@@ -271,6 +273,9 @@ class HostRuntime:
                     continue
                 if self.pending_audio and time.time()-self.pending_audio[1] > 65:
                     self.metrics.inc("audio_failed")
+                    stale_id=self.pending_audio[0]
+                    self.audio_streams.pop(stale_id,None)
+                    self.audio=deque((row for row in self.audio if row["id"]!=stale_id),maxlen=12)
                     self.pending_audio=None
                 # Only generate one outstanding clip; the player is the sole audio sink.
                 if self.pending_audio or self.player["busy"] and time.time()-self.player["heartbeat"]<10:
@@ -337,20 +342,63 @@ class HostRuntime:
                     if normalize(reply) in self.recent_replies:
                         self.skip(event,"repeated AI reply")
                         continue
+                streamed=False; row=None; b64=mime=None
                 if self.fixture:
                     output=io.BytesIO()
                     with wave.open(output,"wb") as w:
                         w.setnchannels(1); w.setsampwidth(2); w.setframerate(8000); w.writeframes(b"\0\0"*800)
                     b64,mime=base64.b64encode(output.getvalue()).decode(),"audio/wav"
+                elif cfg.get("tts_streaming") and cfg.get("tts_provider")=="openrouter":
+                    with self.lock:
+                        row=self.publish("ai",reply,name=event["name"],character=cfg["persona"]["name"],
+                            voice=cfg["tts_voice"],voice_style=cfg["voice_style"],streaming=True)
+                        audio_id=row["id"]
+                        self.audio_streams[audio_id]=dict(id=audio_id,seq=0,chunks=deque(maxlen=300),done=False,failed=False,
+                            created_at=time.time(),sample_rate=24000,published=False)
+                        self.pending_audio=(audio_id,time.time())
+                    def on_chunk(raw):
+                        with self.lock:
+                            if stop.is_set() or generation!=self.generation or version!=self.config_version or self.muted:
+                                raise RuntimeError("stream cancelled")
+                            session=self.audio_streams.get(audio_id)
+                            if not session: raise RuntimeError("stream cancelled")
+                            session["seq"]+=1
+                            session["chunks"].append(dict(seq=session["seq"],audio_b64=base64.b64encode(raw).decode()))
+                            if not session["published"]:
+                                session["published"]=True
+                                event["timings"]["audio_ready"]=time.time()
+                                self.audio.append(dict(id=audio_id,created_at=time.time(),audio_b64="",mime="audio/pcm",
+                                    character=cfg["persona"]["name"],epoch=self.audio_epoch,event_type=event["type"],
+                                    stream=True,sample_rate=24000))
+                    try:
+                        self.providers.speak_streaming(reply,cfg,on_chunk)
+                        with self.lock:
+                            session=self.audio_streams.get(audio_id)
+                            if session: session["done"]=True
+                        streamed=True
+                    except Exception:
+                        with self.lock:
+                            session=self.audio_streams.get(audio_id)
+                            partial=bool(session and session["seq"])
+                            if session:
+                                session["done"]=True;session["failed"]=partial
+                            if not partial:
+                                self.audio_streams.pop(audio_id,None)
+                                self.pending_audio=None
+                        if partial:
+                            raise
+                        b64,mime=self.providers.speak(reply,cfg)
                 else:
                     b64,mime=self.providers.speak(reply,cfg)
                 event["timings"]["tts_finished"]=time.time()
                 with self.lock:
                     if stop.is_set() or generation!=self.generation or version!=self.config_version or self.paused or self.muted or self.queue.expired(event):
+                        if row and row["id"] in self.audio_streams:
+                            self.audio_streams[row["id"]]["done"]=True;self.audio_streams[row["id"]]["failed"]=True
                         self.skip(event,"cancelled, expired or configuration changed during generation")
                         continue
-                    event["timings"]["audio_ready"]=time.time()
-                    latency=time.time()-event["received_at"]
+                    event["timings"].setdefault("audio_ready",time.time())
+                    latency=event["timings"]["audio_ready"]-event["received_at"]
                     self.metrics.latency(latency)
                     self.metrics.inc("replies")
                     if event["type"]=="comment": self.metrics.inc("comments_answered")
@@ -373,9 +421,13 @@ class HostRuntime:
                     self.recent_replies.append(normalize(reply))
                     self.last_spoken=time.time()
                     self.decision(event,"REPLY",reply=reply,latency=round(latency,3))
-                    row=self.publish("ai",reply,name=event["name"],character=cfg["persona"]["name"],voice=cfg["tts_voice"],voice_style=cfg["voice_style"])
-                    self.audio.append(dict(id=row["id"],created_at=time.time(),audio_b64=b64,mime=mime,character=cfg["persona"]["name"],epoch=self.audio_epoch,event_type=event["type"]))
-                    self.pending_audio=(row["id"],time.time())
+                    if row is None:
+                        row=self.publish("ai",reply,name=event["name"],character=cfg["persona"]["name"],
+                            voice=cfg["tts_voice"],voice_style=cfg["voice_style"],streaming=False)
+                    if not streamed:
+                        self.audio.append(dict(id=row["id"],created_at=time.time(),audio_b64=b64,mime=mime,
+                            character=cfg["persona"]["name"],epoch=self.audio_epoch,event_type=event["type"],stream=False))
+                        self.pending_audio=(row["id"],time.time())
             except Exception:
                 with self.lock:
                     self.last_error="فشل توليد الرد أو الصوت؛ راجع حالة المزودين"
@@ -394,7 +446,7 @@ class HostRuntime:
             self.username=str(data.get("tiktok", ""))
             self.generation+=1
             self.audio_epoch+=1
-            self.queue.clear(); self.audio.clear()
+            self.queue.clear(); self.audio.clear(); self.audio_streams.clear()
             self.dedupe=SemanticDeduplicator()
             self.recent_replies.clear()
             self.metrics.reset()
@@ -420,7 +472,7 @@ class HostRuntime:
                 self.stop_event.set()
                 self.generation+=1; self.audio_epoch+=1
                 for e in self.queue.clear(): self.skip(e,"stopped")
-                self.audio.clear(); self.pending_audio=None
+                self.audio.clear(); self.audio_streams.clear(); self.pending_audio=None
                 loop,task=self.client_loop,self.connection_task
                 if loop and loop.is_running() and task:
                     loop.call_soon_threadsafe(task.cancel)
@@ -444,10 +496,28 @@ class HostRuntime:
             if "muted" in data: self.muted=bool(data["muted"])
             self.player=dict(id=pid,heartbeat=now,busy=bool(data.get("busy")),queue_size=max(0,min(20,int(data.get("queue_size",0)))),current_id=data.get("current_id"))
             if self.pending_audio and data.get("finished_id")==self.pending_audio[0] and data.get("boot_id",self.boot_id)==self.boot_id:
+                finished=self.pending_audio[0]
                 if data.get("failed"): self.metrics.inc("audio_failed")
-                self.audio=deque((row for row in self.audio if row["id"]!=self.pending_audio[0]),maxlen=12)
+                self.audio=deque((row for row in self.audio if row["id"]!=finished),maxlen=12)
+                self.audio_streams.pop(finished,None)
                 self.pending_audio=None
-            return dict(ok=True,active=True,epoch=self.audio_epoch,boot_id=self.boot_id,muted=self.muted,volume=self.volume,running=self.running)
+            return dict(ok=True,active=True,epoch=self.audio_epoch,boot_id=self.boot_id,muted=self.muted,volume=self.volume,running=self.running,
+                streaming=bool(self.cfg.get("tts_streaming")),stream_audio_active=bool(self.pending_audio and self.pending_audio[0] in self.audio_streams))
+
+    def audio_chunks(self, audio_id, since, player_id):
+        with self.lock:
+            now=time.time()
+            active=str(player_id)==self.player["id"] and now-self.player["heartbeat"]<10
+            try: aid=int(audio_id); since=int(since)
+            except Exception: return dict(ok=False,active=active,chunks=[],done=True,failed=True,latest_seq=0,sample_rate=24000)
+            session=self.audio_streams.get(aid)
+            valid=active and self.running and not self.muted and self.pending_audio and self.pending_audio[0]==aid and session
+            if not valid:
+                return dict(ok=True,active=active,chunks=[],done=bool(session and session.get("done")),failed=bool(session and session.get("failed")),
+                    latest_seq=session.get("seq",0) if session else 0,sample_rate=session.get("sample_rate",24000) if session else 24000)
+            chunks=[x for x in session["chunks"] if x["seq"]>since][:12]
+            return dict(ok=True,active=True,chunks=chunks,done=bool(session["done"]),failed=bool(session["failed"]),
+                latest_seq=session["seq"],sample_rate=session["sample_rate"],audio_id=aid)
 
     def status(self):
         with self.lock:
@@ -462,7 +532,9 @@ class HostRuntime:
                 personality_mode=self.cfg["personality_mode"],proactive_enabled=self.cfg["proactive_enabled"],
                 crowd_enabled=self.cfg["crowd_enabled"],simulation=self.simulation,fixture=self.fixture,
                 audio_epoch=self.audio_epoch,boot_id=self.boot_id,player_connected=time.time()-self.player["heartbeat"]<10,
-                current_playing=self.player["current_id"],memory_users=len(self.memory.users),**self.self_host.status(self.cfg))
+                current_playing=self.player["current_id"],memory_users=len(self.memory.users),
+                tts_streaming=bool(self.cfg.get("tts_streaming")),tts_voice_label=self.cfg.get("tts_voice_label",self.cfg["tts_voice"]),
+                stream_audio_active=bool(self.pending_audio and self.pending_audio[0] in self.audio_streams),**self.self_host.status(self.cfg))
 
     def self_host_status(self):
         with self.lock:return dict(ok=True,**self.self_host.status(self.cfg),metrics=self.self_host.metric_snapshot())

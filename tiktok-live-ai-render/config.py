@@ -36,7 +36,7 @@ def build_config(data):
         "voice_label": preset["voice_label"],
         "tts_prefix": preset["tts_prefix"],
         "openrouter_key": (data.get("openrouter_key") or os.getenv("OPENROUTER_API_KEY", "")).strip(),
-        "model": (data.get("model") or "google/gemini-2.5-flash").strip(),
+        "model": (data.get("model") or "google/gemini-3.8-flash").strip(),
         "vibi_key": (data.get("vibi_key") or os.getenv("VIBI_API_KEY", "")).strip(),
         "voice_id": (data.get("voice_id") or os.getenv("VIBI_VOICE_ID", "rpGHcNQJvO8dFNNFNj1v")).strip(),
         "tts_voice": (data.get("tts_voice") or preset["voice"] or "adam").strip(),
@@ -53,11 +53,12 @@ def build_config(data):
 
 
 
-    for key, default in {"personality_mode":"manual", "mood_override":"auto", "topic_profile":"cod_snd", "secondary_model":"openai/gpt-4o-mini", "third_model":"meta-llama/llama-3.3-70b-instruct", "tts_fallback":"vibi"}.items():
+    for key, default in {"personality_mode":"manual", "mood_override":"auto", "topic_profile":"cod_snd", "secondary_model":"google/gemini-3.7-flash", "third_model":"openai/gpt-4o-mini", "tts_fallback":"vibi"}.items():
         result[key] = str(data.get(key) or default)[:120]
     for key, default in {"proactive_enabled":False, "crowd_enabled":True, "allow_profile_persona":False,
         "self_host_enabled":True, "self_host_allow_stories":True, "self_host_allow_debates":True,
-        "self_host_allow_banter":True, "self_host_allow_challenges":True, "self_host_allow_polls":True}.items():
+        "self_host_allow_banter":True, "self_host_allow_challenges":True, "self_host_allow_polls":True,
+        "saudi_voice_auto":True, "tts_streaming":True}.items():
         result[key] = data.get(key, default) is True
     for key, low, high, default in [("memory_ttl_hours",6,24,12),("persona_min_duration",600,3600,900),("idle_threshold",45,300,75),("max_proactive_per_10min",0,8,3),
         ("self_host_idle_before_start",10,120,20),("self_host_min_gap",10,60,20),("self_host_max_gap",15,120,40),
@@ -83,8 +84,17 @@ def build_config(data):
         result["tts_provider"] = "openrouter"
     if result["tts_fallback"] not in ("openrouter","vibi","none"):
         result["tts_fallback"] = "vibi"
-    # Voice aliases have known genders; custom presets can safely change voice.
-    voices = {"adam":"ذكر","brian":"ذكر","liam":"ذكر","george":"ذكر","jessica":"أنثى","matilda":"أنثى","sarah":"أنثى","charlotte":"أنثى","rachel":"أنثى"}
-    if result["tts_voice"] in voices:
-        result["voice_gender"] = voices[result["tts_voice"]]
+    # Migrate the old production default before its retirement and keep replies low-latency.
+    if result["model"] == "google/gemini-2.5-flash":
+        result["model"] = "google/gemini-3.8-flash"
+    # Voice aliases have known genders; custom voice IDs keep the preset gender.
+    voices = {"adam":"ذكر","brian":"ذكر","liam":"ذكر","george":"ذكر","jessica":"أنثى","matilda":"أنثى","sarah":"أنثى","charlotte":"أنثى","rachel":"أنثى","alice":"أنثى","bella":"أنثى"}
+    if result["tts_voice"].lower() in voices:
+        result["voice_gender"] = voices[result["tts_voice"].lower()]
+    # English-native stock voices are the main source of broken Saudi Arabic.
+    # Auto-upgrade them to public Saudi-native ElevenLabs library voices.
+    stock_english=set(voices)
+    if result.get("saudi_voice_auto",True) and result["tts_voice"].lower() in stock_english:
+        result["tts_voice"] = "gVzwmdZzRgBrNjXaTmi5" if result["voice_gender"]=="أنثى" else "s83SAGdFTflAwJcAV81K"
+    result["tts_voice_label"] = "Layan — Saudi Najdi" if result["voice_gender"]=="أنثى" and result["tts_voice"]=="gVzwmdZzRgBrNjXaTmi5" else ("Adeeb — Saudi Natural" if result["tts_voice"]=="s83SAGdFTflAwJcAV81K" else result["tts_voice"])
     return result

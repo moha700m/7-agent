@@ -8,6 +8,7 @@ from TikTokLive import TikTokLiveClient
 import asyncio
 import json
 from behavior import PROFILES
+from speech_normalizer import normalize_saudi_speech
 OPENROUTER_BASE = "https://openrouter.ai/api/v1"
 VIBI_BASE = "https://api.vibi.pro"
 
@@ -29,7 +30,8 @@ def build_system_prompt(cfg):
 مواضيع تجنبها: {p.get("avoid_topics", "")}.
 
 قواعد الرد:
-- استخدم اللغة المحلية والطبيعية، وتفاعل مباشرة مع المشاهد.
+- استخدم عامية سعودية طبيعية فعلًا، بمفردات محلية قصيرة ومفهومة. تجنب الفصحى الثقيلة واللهجات المصرية أو الشامية.
+- خلك كأنك داخل بث حي: رد سريع ومباشر، وقفات قصيرة، ولا تبني جمل مترجمة حرفيًا من الإنجليزية.
 - الرد صوتي؛ لا تستخدم Markdown أو رموز مزعجة أو شرح تقني.
 - لا تخترع أحداثًا داخل اللعبة ولا معلومات عن المشاهد.
 - لا تكرر نفس العبارة بشكل آلي.
@@ -164,16 +166,17 @@ def openrouter_speak(text, cfg=None):
     voice_id = (cfg.get("tts_voice") or "george").strip()
     model = (cfg.get("tts_model") or "elevenlabs/eleven-v4-turbo").strip()
 
-    spoken_text = re.sub(r"\[[^\]]{1,40}\]", "", text).strip()
+    spoken_text = normalize_saudi_speech(text)
     style = cfg.get("voice_style", {})
-
+    voice_settings = {
+        "stability":style.get("stability",cfg.get("voice_stability",.5)),
+        "similarity_boost":cfg.get("voice_similarity",.75),
+    }
+    if "eleven-v4" not in model:
+        voice_settings["speed"]=style.get("speed",cfg.get("voice_speed",1))
     request_body = {
         "model":model,"input":spoken_text,"voice":voice_id,"response_format":"mp3",
-        "provider":{"options":{"elevenlabs":{"language_code":"ar","voice_settings":{
-            "stability":style.get("stability",cfg.get("voice_stability",.5)),
-            "similarity_boost":cfg.get("voice_similarity",.75),
-            "speed":style.get("speed",cfg.get("voice_speed",1)),
-        }}}},
+        "provider":{"options":{"elevenlabs":{"language_code":"ar","voice_settings":voice_settings}}},
     }
     r = requests.post(
         f"{OPENROUTER_BASE}/audio/speech",
@@ -194,6 +197,54 @@ def openrouter_speak(text, cfg=None):
         raise RuntimeError(f"OpenRouter TTS HTTP {r.status_code}")
     mime = r.headers.get("content-type", "audio/mpeg")
     return base64.b64encode(r.content).decode("ascii"), mime
+
+
+def openrouter_stream_speak(text, cfg, on_chunk):
+    """Stream raw 24 kHz PCM from OpenRouter so playback starts before synthesis ends."""
+    key=cfg.get("openrouter_key","")
+    voice_id=(cfg.get("tts_voice") or "s83SAGdFTflAwJcAV81K").strip()
+    model=(cfg.get("tts_model") or "elevenlabs/eleven-v4-turbo").strip()
+    spoken_text=normalize_saudi_speech(text)
+    style=cfg.get("voice_style",{})
+    body={
+        "model":model,
+        "input":spoken_text,
+        "voice":voice_id,
+        "provider":{"options":{"elevenlabs":{"language_code":"ar","voice_settings":{
+            "stability":style.get("stability",cfg.get("voice_stability",.5)),
+            "similarity_boost":cfg.get("voice_similarity",.75),
+        }}}},
+    }
+    headers={
+        "Authorization":f"Bearer {key}",
+        "Content-Type":"application/json",
+        "HTTP-Referer":os.getenv("RENDER_EXTERNAL_URL","https://render.com"),
+        "X-Title":"TikTok AI Live",
+    }
+    r=requests.post(f"{OPENROUTER_BASE}/audio/speech",headers=headers,json=body,stream=True,timeout=(4,25))
+    if r.status_code==400:
+        body["provider"]={"options":{"elevenlabs":{"language_code":"ar"}}}
+        r=requests.post(f"{OPENROUTER_BASE}/audio/speech",headers=headers,json=body,stream=True,timeout=(4,25))
+    ctype=r.headers.get("content-type","")
+    if r.status_code!=200 or "json" in ctype:
+        raise RuntimeError(f"OpenRouter streaming TTS HTTP {r.status_code}")
+    pending=bytearray();sent=0;first_at=None
+    packet_bytes=9600
+    for part in r.iter_content(chunk_size=4096):
+        if not part:
+            continue
+        pending.extend(part)
+        while len(pending)>=packet_bytes:
+            raw=bytes(pending[:packet_bytes]);del pending[:packet_bytes]
+            if first_at is None:first_at=time.time()
+            on_chunk(raw);sent+=len(raw)
+    if len(pending)%2: pending=pending[:-1]
+    if pending:
+        if first_at is None:first_at=time.time()
+        raw=bytes(pending);on_chunk(raw);sent+=len(raw)
+    if not sent:
+        raise RuntimeError("OpenRouter streaming TTS returned no PCM")
+    return {"format":"pcm_s16le","sample_rate":24000,"bytes":sent,"first_chunk_at":first_at}
 
 
 def vibi_speak(text, cfg=None):
@@ -284,6 +335,21 @@ class ProviderManager:
                 self.health["openrouter"] = "degraded"
         self.health.update(openrouter="error",last_error="تعذر توليد الرد بعد تجربة النماذج الاحتياطية")
         raise RuntimeError(self.health["last_error"])
+
+    def speak_streaming(self, text, cfg, on_chunk):
+        self.health["audio_generation"]="streaming"
+        try:
+            if cfg.get("tts_provider","openrouter")!="openrouter" or not cfg.get("openrouter_key"):
+                raise RuntimeError("streaming provider unavailable")
+            meta=openrouter_stream_speak(text,cfg,on_chunk)
+            self.health.update(tts="ok",current_tts_provider="openrouter",streaming=True)
+            return meta
+        except Exception:
+            self.metrics.inc("tts_errors")
+            self.health.update(tts="degraded",streaming=False)
+            raise
+        finally:
+            self.health["audio_generation"]="idle"
 
     def speak(self, text, cfg):
         self.health["audio_generation"] = "generating"
