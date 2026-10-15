@@ -28,10 +28,45 @@ class RaceCommentator:
         self.last_poll = 0.0
         self.force_speak = False
         self.milestones = set()
-        self.thread = threading.Thread(
-            target=self._loop, daemon=True, name="race-commentator"
-        )
-        self.thread.start()
+        self.thread = None
+        self.restart_count = 0
+        self.ensure_running()
+
+    def ensure_running(self):
+        with self.lock:
+            if self.thread and self.thread.is_alive():
+                return True
+            self.thread = threading.Thread(
+                target=self._loop, daemon=True, name="race-commentator"
+            )
+            self.thread.start()
+            self.restart_count += 1
+            return True
+
+    def probe(self):
+        self.ensure_running()
+        try:
+            response = self.session.get(
+                RACE_STATE_URL,
+                timeout=(1.5, 3.5),
+                headers={"User-Agent": "TikTok-Race-Commentator/1.0"},
+            )
+            response.raise_for_status()
+            state = response.json()
+            if not isinstance(state, dict) or not state.get("ok"):
+                raise RuntimeError("race state unavailable")
+            with self.lock:
+                self.last_state = state
+                self.last_poll = time.time()
+                self.connected = True
+                self.last_error = ""
+            return state
+        except Exception as exc:
+            with self.lock:
+                self.connected = False
+                self.last_error = f"{type(exc).__name__}: {str(exc)[:120]}"
+                self.last_poll = time.time()
+            return None
 
     def reset(self):
         with self.lock:
@@ -67,6 +102,9 @@ class RaceCommentator:
                 race_commentator_last_error=self.last_error,
                 race_commentator_next_in=max(0, round(gap - (time.time() - self.last_spoken), 1)) if self.last_spoken else 0,
                 race_commentator_source=RACE_STATE_URL,
+                race_commentator_thread_alive=bool(self.thread and self.thread.is_alive()),
+                race_commentator_thread_restarts=self.restart_count,
+                race_commentator_last_poll_age=round(time.time()-self.last_poll,1) if self.last_poll else None,
             )
 
     @staticmethod
@@ -184,25 +222,16 @@ class RaceCommentator:
                         self.connected = False
                     continue
 
-                response = self.session.get(
-                    RACE_STATE_URL,
-                    timeout=(1.5, 2.5),
-                    headers={"User-Agent": "TikTok-Race-Commentator/1.0"},
-                )
-                response.raise_for_status()
-                state = response.json()
-                if not isinstance(state, dict) or not state.get("ok"):
-                    raise RuntimeError("race state unavailable")
+                previous = self.last_state
+                state = self.probe()
+                if not state:
+                    time.sleep(1.0)
+                    continue
 
                 now = time.time()
                 with self.lock:
-                    previous = self.last_state
                     forced = self.force_speak
                     self.force_speak = False
-                    self.last_state = state
-                    self.last_poll = now
-                    self.connected = True
-                    self.last_error = ""
 
                 event_text = self._choose_event(previous, state, cfg, now, forced)
                 if not event_text:
