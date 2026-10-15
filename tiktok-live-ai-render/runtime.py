@@ -61,7 +61,7 @@ class HostRuntime:
         self.responder_thread = self.tiktok_thread = None
         self.client = self.client_loop = self.connection_task = None
         self.responder_heartbeat = 0
-        self.player = dict(id="", heartbeat=0, busy=False, queue_size=0, current_id=None)
+        self.player = dict(id="", heartbeat=0, busy=False, queue_size=0, current_id=None, pcm_streaming=False)
         self.pending_audio = None
         self.recent_replies = deque(maxlen=8)
         self.viewer_rate = {}
@@ -348,7 +348,7 @@ class HostRuntime:
                     with wave.open(output,"wb") as w:
                         w.setnchannels(1); w.setsampwidth(2); w.setframerate(8000); w.writeframes(b"\0\0"*800)
                     b64,mime=base64.b64encode(output.getvalue()).decode(),"audio/wav"
-                elif cfg.get("tts_streaming") and cfg.get("tts_provider")=="openrouter":
+                elif cfg.get("tts_streaming") and cfg.get("tts_provider")=="openrouter" and self.player.get("pcm_streaming"):
                     with self.lock:
                         row=self.publish("ai",reply,name=event["name"],character=cfg["persona"]["name"],
                             voice=cfg["tts_voice"],voice_style=cfg["voice_style"],streaming=True)
@@ -494,7 +494,8 @@ class HostRuntime:
                 return dict(ok=True,active=False,epoch=self.audio_epoch,boot_id=self.boot_id)
             if "volume" in data: self.volume=max(0,min(1,float(data["volume"])))
             if "muted" in data: self.muted=bool(data["muted"])
-            self.player=dict(id=pid,heartbeat=now,busy=bool(data.get("busy")),queue_size=max(0,min(20,int(data.get("queue_size",0)))),current_id=data.get("current_id"))
+            self.player=dict(id=pid,heartbeat=now,busy=bool(data.get("busy")),queue_size=max(0,min(20,int(data.get("queue_size",0)))),
+                current_id=data.get("current_id"),pcm_streaming=bool(data.get("pcm_streaming")))
             if self.pending_audio and data.get("finished_id")==self.pending_audio[0] and data.get("boot_id",self.boot_id)==self.boot_id:
                 finished=self.pending_audio[0]
                 if data.get("failed"): self.metrics.inc("audio_failed")
@@ -502,7 +503,7 @@ class HostRuntime:
                 self.audio_streams.pop(finished,None)
                 self.pending_audio=None
             return dict(ok=True,active=True,epoch=self.audio_epoch,boot_id=self.boot_id,muted=self.muted,volume=self.volume,running=self.running,
-                streaming=bool(self.cfg.get("tts_streaming")),stream_audio_active=bool(self.pending_audio and self.pending_audio[0] in self.audio_streams))
+                streaming=bool(self.cfg.get("tts_streaming") and self.player.get("pcm_streaming")),stream_audio_active=bool(self.pending_audio and self.pending_audio[0] in self.audio_streams))
 
     def audio_chunks(self, audio_id, since, player_id):
         with self.lock:
@@ -533,7 +534,8 @@ class HostRuntime:
                 crowd_enabled=self.cfg["crowd_enabled"],simulation=self.simulation,fixture=self.fixture,
                 audio_epoch=self.audio_epoch,boot_id=self.boot_id,player_connected=time.time()-self.player["heartbeat"]<10,
                 current_playing=self.player["current_id"],memory_users=len(self.memory.users),
-                tts_streaming=bool(self.cfg.get("tts_streaming")),tts_voice_label=self.cfg.get("tts_voice_label",self.cfg["tts_voice"]),
+                tts_streaming=bool(self.cfg.get("tts_streaming")),player_streaming_capable=bool(self.player.get("pcm_streaming")),
+                tts_voice_label=self.cfg.get("tts_voice_label",self.cfg["tts_voice"]),
                 stream_audio_active=bool(self.pending_audio and self.pending_audio[0] in self.audio_streams),**self.self_host.status(self.cfg))
 
     def self_host_status(self):
