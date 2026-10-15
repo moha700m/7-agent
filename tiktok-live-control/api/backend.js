@@ -56,7 +56,7 @@ function saveSecretCookie(res, secrets, secret) {
 }
 
 module.exports = async function handler(req, res) {
-  const allowed = new Set(["status","events","test","start","stop","preview","secret_status"]);
+  const allowed = new Set(["status","events","test","start","stop","preview","configure","presets","secret_status"]);
   const path = String(req.query.path || "");
   if (!allowed.has(path)) return res.status(400).json({ error: "مسار غير مسموح" });
 
