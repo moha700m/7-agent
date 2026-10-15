@@ -62,12 +62,29 @@ def test_semantic_dedupe_does_not_swallow_conversation():
 
 def test_queue_expiration_priority_and_load_shedding():
     now=time.time();q=EventQueue(maxsize=2)
-    join=dict(type='join',received_at=now-10);q.put(join)
+    join=dict(type='join',received_at=now-20);q.put(join)
     gift=dict(type='gift',received_at=now,gift_value=200);q.put(gift)
     question=dict(type='comment',received_at=now,classification={'priority':94})
     assert q.put(question)==join
     e,old=q.take();assert e is gift
     q.put(join);e,old=q.take();assert old==[join] and e is question
+
+def test_realtime_interactions_have_fast_priority_and_long_ttl():
+    now=time.time();q=EventQueue()
+    follow=dict(type='follow',received_at=now-30,classification={'priority':50})
+    gift=dict(type='gift',received_at=now-70,gift_value=1,classification={'priority':50})
+    comment=dict(type='comment',received_at=now,classification={'category':'question','priority':78})
+    q.put(follow);q.put(gift);q.put(comment)
+    assert not q.expired(follow) and not q.expired(gift)
+    first,_=q.take();assert first['type']=='gift'
+    assert q.max_priority()>=800
+
+
+def test_fast_human_replies_for_follow_gift_and_greeting(host):
+    assert 'متابعة' in host.fast_interaction_reply({'type':'follow','name':'سعد','classification':{}})
+    assert 'ورد' in host.fast_interaction_reply({'type':'gift','name':'سعد','text':'1x ورد','classification':{}})
+    greeting=host.fast_interaction_reply({'type':'comment','name':'سعد','classification':{'category':'greeting'}})
+    assert greeting and 'سعد' in greeting
 
 
 def test_mood_crowd_voice_and_dwell():

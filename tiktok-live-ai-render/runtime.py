@@ -165,6 +165,10 @@ class HostRuntime:
                     return event
                 event["text"] = str(self.like_bucket)
                 self.like_bucket=0
+            # A real viewer interaction always outranks autonomous/proactive chatter.
+            if kind in ("gift","follow","share","comment"):
+                for old in self.queue.drop_types({"proactive"}):
+                    self.skip(old,"interrupted by live viewer interaction","INTERRUPTED")
             self.mood.update(event,self.crowd(),self.cfg)
             reason = self.reply_policy(event)
             if reason:
@@ -208,6 +212,47 @@ class HostRuntime:
     def player_idle(self):
         return (time.time()-self.player["heartbeat"] < 10 and not self.player["busy"] and not self.player["queue_size"] and self.pending_audio is None)
 
+    def fast_interaction_reply(self, event):
+        """Human-sounding fast path for events that should never wait on an LLM."""
+        name=event.get("name") or "يا الغالي"
+        kind=event.get("type")
+        if kind=="follow":
+            return secrets.choice((
+                f"كفو يا {name}، تسلم على المتابعة",
+                f"يا هلا {name}، شكراً على المتابعة",
+                f"نورت يا {name}، يعطيك العافية على المتابعة",
+                f"حياك {name}، كفو على المتابعة",
+            ))
+        if kind=="gift":
+            gift=(event.get("text") or "الهدية").strip()
+            return secrets.choice((
+                f"يا بعدي {name}، تسلم على {gift}",
+                f"كفو يا {name}، شكراً على {gift}",
+                f"يا سلام يا {name}، يعطيك العافية على {gift}",
+                f"بيض الله وجهك يا {name}، تسلم على {gift}",
+            ))
+        if kind=="share":
+            return secrets.choice((
+                f"تسلم يا {name} على الشير",
+                f"كفو يا {name}، يعطيك العافية على المشاركة",
+                f"يا هلا {name}، شكراً على الشير",
+            ))
+        category=event.get("classification",{}).get("category")
+        if kind=="comment" and category=="greeting":
+            return secrets.choice((
+                f"وعليكم السلام يا {name}",
+                f"يا هلا والله يا {name}",
+                f"هلا وغلا يا {name}",
+                f"حياك الله يا {name}",
+            ))
+        if kind=="comment" and category=="compliment":
+            return secrets.choice((
+                f"كفو يا {name}، من ذوقك",
+                f"تسلم يا {name}، ما عليك زود",
+                f"يا بعدي يا {name}، كفو",
+            ))
+        return None
+
     def worker(self, stop, generation):
         while not stop.wait(.15):
             with self.lock:
@@ -226,6 +271,12 @@ class HostRuntime:
                 if target:
                     self.configure({"preset_id":target})
                 cooldown=self.cfg["behavior"]["global_cooldown"]*self.crowd()["cooldown"]
+                top_priority=self.queue.max_priority()
+                # Gifts/follows/direct questions should feel real-time, not wait behind a long global cooldown.
+                if top_priority>=800:
+                    cooldown=min(cooldown,.35)
+                elif top_priority>=560:
+                    cooldown=min(cooldown,.85)
                 if time.time()-self.last_spoken < cooldown:
                     continue
                 event, expired=self.queue.take()
@@ -254,10 +305,14 @@ class HostRuntime:
                     reply=("هلا {name} رجعت نورت" if event["context"].get("joins",0)>0 else "هلا والله يا {name} نورت").format(name=event["name"])
                 elif event["type"] in ("proactive","manual"):
                     reply=event["text"]
-                elif self.fixture:
-                    reply="أنا ذكاء اصطناعي مع البث" if event["classification"]["category"]=="personal_question" else "يا هلا، وش رأيكم نكمل السالفة؟"
                 else:
-                    reply=self.providers.reply(event,cfg)
+                    fast_reply=self.fast_interaction_reply(event)
+                    if fast_reply:
+                        reply=fast_reply
+                    elif self.fixture:
+                        reply="أنا ذكاء اصطناعي مع البث" if event["classification"]["category"]=="personal_question" else "يا هلا، وش رأيكم نكمل السالفة؟"
+                    else:
+                        reply=self.providers.reply(event,cfg)
                 event["timings"]["ai_finished"]=time.time()
                 with self.lock:
                     if stop.is_set() or generation!=self.generation or version!=self.config_version or self.paused or self.muted or self.queue.expired(event):
@@ -286,12 +341,18 @@ class HostRuntime:
                     if event["type"]=="join":
                         self.metrics.inc("joins_spoken")
                         self.last_join=time.time()
+                    elif event["type"]=="gift":
+                        self.metrics.inc("gifts_spoken")
+                    elif event["type"]=="follow":
+                        self.metrics.inc("follows_spoken")
+                    elif event["type"]=="share":
+                        self.metrics.inc("shares_spoken")
                     self.memory.add_ai_reply(event["username"],reply,event["type"])
                     self.recent_replies.append(normalize(reply))
                     self.last_spoken=time.time()
                     self.decision(event,"REPLY",reply=reply,latency=round(latency,3))
                     row=self.publish("ai",reply,name=event["name"],character=cfg["persona"]["name"],voice=cfg["tts_voice"],voice_style=cfg["voice_style"])
-                    self.audio.append(dict(id=row["id"],created_at=time.time(),audio_b64=b64,mime=mime,character=cfg["persona"]["name"],epoch=self.audio_epoch))
+                    self.audio.append(dict(id=row["id"],created_at=time.time(),audio_b64=b64,mime=mime,character=cfg["persona"]["name"],epoch=self.audio_epoch,event_type=event["type"]))
                     self.pending_audio=(row["id"],time.time())
             except Exception:
                 with self.lock:

@@ -95,17 +95,19 @@ class SemanticDeduplicator:
 
 
 class PriorityEngine:
-    BASE = dict(gift=850, comment=400, follow=500, share=420, join=320, like=80, proactive=40, manual=980)
+    BASE = dict(gift=950, comment=600, follow=900, share=650, join=320, like=80, proactive=40, manual=980)
 
     def score(self, event, state=None):
         state = state or {}
         c = event.get("classification", {})
         score = self.BASE.get(event.get("type"), 100)
         if event.get("type") == "comment":
-            score = {"high_priority_question":930,"mention_ai":850,"mention_owner":730,"gaming_question":770,"question":750,"personal_question":780}.get(c.get("category"),int(c.get("priority",45))*8)
-            score += 20 if event.get("direct_mention") else 0
+            score = {"high_priority_question":940,"mention_ai":900,"mention_owner":820,"gaming_question":860,
+                "question":850,"personal_question":860,"conversation_continuation":830,"request":760,
+                "joke":680,"compliment":620,"greeting":580,"other":600}.get(c.get("category"),max(560,int(c.get("priority",45))*9))
+            score += 25 if event.get("direct_mention") else 0
         if event.get("type") == "gift":
-            score = 975 if event.get("gift_value",0)>=100 else 820
+            score = 1000 if event.get("gift_value",0)>=100 else 960
             score += min(25,event.get("gift_value",0))
             if event.get("streak_finished"):
                 score = max(score,880)
@@ -113,5 +115,10 @@ class PriorityEngine:
         score += min(25, context.get("comments",0)*2)
         score -= 500 if c.get("category") in ("spam","toxic","repeated_message") else 0
         age = max(0,state.get("now",time.time())-event.get("received_at",time.time()))
-        score += min(20,int(age*2)) if event.get("type")=="gift" else -min(100,int(age*5))
+        if event.get("type") in ("gift","follow"):
+            score += min(30,int(age*2))
+        elif event.get("type")=="comment":
+            score -= min(50,int(age*2))
+        else:
+            score -= min(100,int(age*5))
         return max(0,min(1000,int(score)))

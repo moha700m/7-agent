@@ -14,7 +14,7 @@ class MetricsManager:
             self.session_start = self.clock()
             self.counts = Counter({k: 0 for k in (
                 "comments_received", "comments_answered", "comments_skipped", "joins_received",
-                "joins_spoken", "gifts_received", "follows", "shares", "likes", "ai_errors",
+                "joins_spoken", "gifts_received", "gifts_spoken", "follows", "follows_spoken", "shares", "shares_spoken", "likes", "ai_errors",
                 "tts_errors", "reconnects", "queue_peak", "suppressed_spam", "deduped_messages",
                 "expired", "replies", "audio_failed", "queue_dropped")})
             self.recent = deque(maxlen=20000)

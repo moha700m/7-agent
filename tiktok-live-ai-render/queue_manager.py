@@ -4,7 +4,7 @@ from intelligence import PriorityEngine
 
 
 class EventQueue:
-    TTL = dict(comment=15, join=18, follow=20, share=15, gift=45, like=8, proactive=8, manual=30)
+    TTL = dict(comment=30, join=18, follow=60, share=35, gift=120, like=8, proactive=8, manual=30)
 
     def __init__(self, maxsize=80, clock=time.time):
         self.maxsize, self.clock = maxsize, clock
@@ -20,6 +20,20 @@ class EventQueue:
         with self.lock:
             old, self.items = self.items, []
             return old
+
+    def drop_types(self, types):
+        with self.lock:
+            types=set(types)
+            dropped=[e for e in self.items if e.get("type") in types]
+            self.items=[e for e in self.items if e.get("type") not in types]
+            return dropped
+
+    def max_priority(self):
+        with self.lock:
+            if not self.items:
+                return 0
+            now=self.clock()
+            return max(self.priority.score(e,{"now":now}) for e in self.items)
 
     def put(self, event):
         with self.lock:
