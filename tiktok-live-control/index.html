@@ -421,6 +421,7 @@ function loadSettings(){
     const data=JSON.parse(localStorage.getItem("cyber-live-settings-v4")||localStorage.getItem("cyber-live-settings-v3")||"{}");
     Object.entries(data).forEach(([id,v])=>{const e=$(id);if(!e)return;if(e.type==="checkbox")e.checked=!!v;else e.value=v});
     if($("tts_voice")&&$("tts_voice").value==="s83SAGdFTflAwJcAV81K")$("tts_voice").value="yXEnnEln9armDCyhkXcA";
+    if($("tts_voice")&&$("tts_voice").value==="gVzwmdZzRgBrNjXaTmi5")$("tts_voice").value="QsV9PCczMIklRM6xLPAS";
     ["energy","humor","sarcasm"].forEach(id=>$(id+"V").value=$(id).value);
   }catch{}
 }
