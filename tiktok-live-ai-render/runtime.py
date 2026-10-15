@@ -61,7 +61,7 @@ class HostRuntime:
         self.responder_thread = self.tiktok_thread = None
         self.client = self.client_loop = self.connection_task = None
         self.responder_heartbeat = 0
-        self.player = dict(id="", heartbeat=0, busy=False, queue_size=0, current_id=None, pcm_streaming=False)
+        self.player = dict(id="", heartbeat=0, busy=False, queue_size=0, current_id=None, current_since=0, pcm_streaming=False)
         self.pending_audio = None
         self.recent_replies = deque(maxlen=8)
         self.viewer_rate = {}
@@ -269,14 +269,21 @@ class HostRuntime:
                 self.responder_heartbeat=time.time()
                 self.memory.cleanup_expired()
                 self.mood.update(None,self.crowd(),self.cfg,idle=time.time()-self.last_event)
+                for old in self.queue.prune_expired():
+                    self.skip(old,"expired while audio busy","EXPIRED")
                 if self.paused or self.muted:
                     continue
-                if self.pending_audio and time.time()-self.pending_audio[1] > 65:
+                if self.pending_audio and time.time()-self.pending_audio[1] > 35:
                     self.metrics.inc("audio_failed")
                     stale_id=self.pending_audio[0]
                     self.audio_streams.pop(stale_id,None)
                     self.audio=deque((row for row in self.audio if row["id"]!=stale_id),maxlen=12)
                     self.pending_audio=None
+                    self.audio_epoch+=1
+                    self.player["busy"]=False
+                    self.player["current_id"]=None
+                    self.player["current_since"]=0
+                    self.publish("error","تم إسقاط مقطع صوت عالق واستكمال الطابور",audio_id=stale_id)
                 # Only generate one outstanding clip; the player is the sole audio sink.
                 if self.pending_audio or self.player["busy"] and time.time()-self.player["heartbeat"]<10:
                     continue
@@ -494,16 +501,39 @@ class HostRuntime:
                 return dict(ok=True,active=False,epoch=self.audio_epoch,boot_id=self.boot_id)
             if "volume" in data: self.volume=max(0,min(1,float(data["volume"])))
             if "muted" in data: self.muted=bool(data["muted"])
-            self.player=dict(id=pid,heartbeat=now,busy=bool(data.get("busy")),queue_size=max(0,min(20,int(data.get("queue_size",0)))),
-                current_id=data.get("current_id"),pcm_streaming=bool(data.get("pcm_streaming")))
-            if self.pending_audio and data.get("finished_id")==self.pending_audio[0] and data.get("boot_id",self.boot_id)==self.boot_id:
+
+            finished_id=data.get("finished_id")
+            if self.pending_audio and finished_id==self.pending_audio[0] and data.get("boot_id",self.boot_id)==self.boot_id:
                 finished=self.pending_audio[0]
                 if data.get("failed"): self.metrics.inc("audio_failed")
                 self.audio=deque((row for row in self.audio if row["id"]!=finished),maxlen=12)
                 self.audio_streams.pop(finished,None)
                 self.pending_audio=None
+
+            incoming_busy=bool(data.get("busy"))
+            incoming_current=data.get("current_id")
+            previous_current=self.player.get("current_id")
+            current_since=self.player.get("current_since",0) if incoming_current and incoming_current==previous_current else (now if incoming_current else 0)
+            force_reset=False
+            if incoming_busy:
+                pending_id=self.pending_audio[0] if self.pending_audio else None
+                playback_age=now-current_since if current_since else 0
+                if not pending_id or incoming_current!=pending_id or playback_age>25:
+                    stale=incoming_current
+                    if pending_id:
+                        self.audio=deque((row for row in self.audio if row["id"]!=pending_id),maxlen=12)
+                        self.audio_streams.pop(pending_id,None)
+                        self.pending_audio=None
+                    if stale is not None:self.metrics.inc("audio_failed")
+                    self.audio_epoch+=1
+                    incoming_busy=False;incoming_current=None;current_since=0;force_reset=True
+                    self.publish("error","تم تحرير مشغل صوت عالق بدون إعادة المقطع",audio_id=stale)
+
+            self.player=dict(id=pid,heartbeat=now,busy=incoming_busy,queue_size=max(0,min(20,int(data.get("queue_size",0)))),
+                current_id=incoming_current,current_since=current_since,pcm_streaming=bool(data.get("pcm_streaming")))
             return dict(ok=True,active=True,epoch=self.audio_epoch,boot_id=self.boot_id,muted=self.muted,volume=self.volume,running=self.running,
-                streaming=bool(self.cfg.get("tts_streaming") and self.player.get("pcm_streaming")),stream_audio_active=bool(self.pending_audio and self.pending_audio[0] in self.audio_streams))
+                force_reset=force_reset,streaming=bool(self.cfg.get("tts_streaming") and self.player.get("pcm_streaming")),
+                stream_audio_active=bool(self.pending_audio and self.pending_audio[0] in self.audio_streams))
 
     def audio_chunks(self, audio_id, since, player_id):
         with self.lock:
@@ -533,7 +563,8 @@ class HostRuntime:
                 personality_mode=self.cfg["personality_mode"],proactive_enabled=self.cfg["proactive_enabled"],
                 crowd_enabled=self.cfg["crowd_enabled"],simulation=self.simulation,fixture=self.fixture,
                 audio_epoch=self.audio_epoch,boot_id=self.boot_id,player_connected=time.time()-self.player["heartbeat"]<10,
-                current_playing=self.player["current_id"],memory_users=len(self.memory.users),
+                current_playing=self.player["current_id"],current_playing_age=round(time.time()-self.player.get("current_since",0),2) if self.player.get("current_since") else 0,
+                memory_users=len(self.memory.users),
                 tts_streaming=bool(self.cfg.get("tts_streaming")),player_streaming_capable=bool(self.player.get("pcm_streaming")),
                 tts_voice_label=self.cfg.get("tts_voice_label",self.cfg["tts_voice"]),
                 stream_audio_active=bool(self.pending_audio and self.pending_audio[0] in self.audio_streams),**self.self_host.status(self.cfg))
