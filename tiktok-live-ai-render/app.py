@@ -12,6 +12,8 @@ app = Flask(__name__)
 
 TIKTOK_USERNAME = os.getenv("TIKTOK_USERNAME", "mgz7o2").lstrip("@")
 DEMO_TOKEN = os.getenv("DEMO_TOKEN", "")
+INTERNAL_EVENT_TOKEN = os.getenv("INTERNAL_EVENT_TOKEN", "")
+PORT = int(os.getenv("PORT", "10000"))
 MAX_PLAYERS = int(os.getenv("MAX_PLAYERS", "24"))
 WAIT_SECONDS = float(os.getenv("WAIT_SECONDS", "16"))
 COUNTDOWN_SECONDS = float(os.getenv("COUNTDOWN_SECONDS", "5"))
@@ -48,6 +50,24 @@ class RaceGame:
             self.last_tiktok_event = str(kind)
             self.last_tiktok_event_at = time.time()
         print(f"RACE_EVENT {kind} user={username} pid={os.getpid()} game={id(self)} {extra}".strip(), flush=True)
+
+    def _relay_tiktok(self, kind, username="", name="", **extra):
+        payload = {"kind": str(kind), "username": str(username or ""), "name": str(name or "")}
+        payload.update(extra)
+        headers = {"X-Internal-Token": INTERNAL_EVENT_TOKEN}
+        url = f"http://127.0.0.1:{PORT}/api/internal/tiktok"
+        last = ""
+        for _ in range(4):
+            try:
+                r = requests.post(url, json=payload, headers=headers, timeout=1.2)
+                if r.status_code == 200:
+                    return True
+                last = f"HTTP {r.status_code}"
+            except Exception as exc:
+                last = type(exc).__name__
+            time.sleep(.15)
+        print(f"RACE_RELAY_FAIL kind={kind} user={username} error={last}", flush=True)
+        return False
 
     def _player(self, username, name):
         rng = random.Random(f"{username}:{self.round}")
@@ -237,6 +257,7 @@ class RaceGame:
                         self.live = "LIVE"
                         self.room_id = client.room_id
                         self.last_error = ""
+                    self._relay_tiktok("CONNECT", room_id=str(client.room_id or ""))
                     print(f"RACE_TIKTOK_CONNECTED room={client.room_id}", flush=True)
 
                 @client.on(DisconnectEvent)
@@ -244,43 +265,39 @@ class RaceGame:
                     with self.lock:
                         self.live = "RECONNECTING"
                         self.room_id = None
+                    self._relay_tiktok("DISCONNECT")
 
                 @client.on(JoinEvent)
                 async def on_join(event):
                     username, name = who(event)
-                    self._record_tiktok_event("JOIN", username)
-                    self.join(username, name)
+                    self._record_tiktok_event("SOURCE_JOIN", username)
+                    self._relay_tiktok("JOIN", username, name, room_id=str(client.room_id or ""))
 
                 @client.on(CommentEvent)
                 async def on_comment(event):
                     username, name = who(event)
                     text = str(getattr(event, "comment", "") or "").strip()
-                    self._record_tiktok_event("COMMENT", username, f"text={text[:40]}")
-                    # Any comment is enough to enter the race. This is much more reliable
-                    # than depending only on JoinEvent, which TikTok may omit for viewers.
-                    self.join(username, name)
+                    self._record_tiktok_event("SOURCE_COMMENT", username, f"text={text[:40]}")
+                    self._relay_tiktok("COMMENT", username, name, text=text[:200], room_id=str(client.room_id or ""))
 
                 @client.on(FollowEvent)
                 async def on_follow(event):
                     username, name = who(event)
-                    self._record_tiktok_event("FOLLOW", username)
-                    self.join(username, name)
-                    self.boost(username, .10)
+                    self._record_tiktok_event("SOURCE_FOLLOW", username)
+                    self._relay_tiktok("FOLLOW", username, name, room_id=str(client.room_id or ""))
 
                 @client.on(LikeEvent)
                 async def on_like(event):
                     username, name = who(event)
                     count = max(1, int(getattr(event, "count", 1) or 1))
-                    self._record_tiktok_event("LIKE", username, f"count={count}")
-                    self.join(username, name)
-                    self.boost(username, min(.05, count * .002))
+                    self._record_tiktok_event("SOURCE_LIKE", username, f"count={count}")
+                    self._relay_tiktok("LIKE", username, name, count=count, room_id=str(client.room_id or ""))
 
                 @client.on(ShareEvent)
                 async def on_share(event):
                     username, name = who(event)
-                    self._record_tiktok_event("SHARE", username)
-                    self.join(username, name)
-                    self.boost(username, .06)
+                    self._record_tiktok_event("SOURCE_SHARE", username)
+                    self._relay_tiktok("SHARE", username, name, room_id=str(client.room_id or ""))
 
                 @client.on(GiftEvent)
                 async def on_gift(event):
@@ -289,10 +306,9 @@ class RaceGame:
                         return
                     username, name = who(event)
                     count = max(1, int(getattr(event, "repeat_count", 1) or 1))
-                    self._record_tiktok_event("GIFT", username, f"count={count}")
-                    self.join(username, name)
                     diamonds = max(0, int(getattr(gift, "diamond_count", 0) or 0)) * count
-                    self.boost(username, min(.22, .04 + math.log10(max(1, diamonds)) * .05))
+                    self._record_tiktok_event("SOURCE_GIFT", username, f"count={count}")
+                    self._relay_tiktok("GIFT", username, name, count=count, diamonds=diamonds, room_id=str(client.room_id or ""))
 
                 async def connect():
                     task = await client.start(process_connect_events=True)
@@ -756,6 +772,47 @@ def health():
 def state():
     return jsonify(GAME.state())
 
+@app.post("/api/internal/tiktok")
+def internal_tiktok_event():
+    if not INTERNAL_EVENT_TOKEN or request.headers.get("X-Internal-Token", "") != INTERNAL_EVENT_TOKEN:
+        return jsonify(error="forbidden"), 403
+    body = request.get_json(silent=True) or {}
+    kind = str(body.get("kind", "")).upper()
+    username = str(body.get("username", "") or "")
+    name = str(body.get("name", "") or username)
+    room_id = str(body.get("room_id", "") or "")
+
+    with GAME.lock:
+        if room_id:
+            GAME.live = "LIVE"
+            GAME.room_id = room_id
+            GAME.last_error = ""
+        if kind == "CONNECT":
+            GAME.live = "LIVE"
+            if room_id:
+                GAME.room_id = room_id
+            GAME.last_error = ""
+        elif kind == "DISCONNECT":
+            GAME.live = "RECONNECTING"
+            GAME.room_id = None
+
+    if kind in {"JOIN", "COMMENT", "FOLLOW", "LIKE", "SHARE", "GIFT"} and username:
+        GAME._record_tiktok_event(kind, username)
+        GAME.join(username, name)
+        if kind == "FOLLOW":
+            GAME.boost(username, .10)
+        elif kind == "LIKE":
+            count = max(1, int(body.get("count", 1) or 1))
+            GAME.boost(username, min(.05, count * .002))
+        elif kind == "SHARE":
+            GAME.boost(username, .06)
+        elif kind == "GIFT":
+            diamonds = max(0, int(body.get("diamonds", 0) or 0))
+            GAME.boost(username, min(.22, .04 + math.log10(max(1, diamonds)) * .05))
+
+    st = GAME.state()
+    return jsonify(ok=True, live=st["live"], players=st["player_count"], phase=st["phase"])
+
 @app.post("/api/demo")
 def demo():
     if DEMO_TOKEN and request.headers.get("X-Demo-Token", "") != DEMO_TOKEN:
@@ -778,4 +835,4 @@ def reset():
     return jsonify(GAME.state())
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", "10000")))
+    app.run(host="0.0.0.0", port=PORT)
