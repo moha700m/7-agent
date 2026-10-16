@@ -1,0 +1,57 @@
+name: Build CyberMic IPA
+
+on:
+  push:
+    branches:
+      - cybermic-ios18-injection
+    paths:
+      - "cybermic/**"
+      - ".github/workflows/build-cybermic-ipa.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: cybermic
+        run: xcodegen generate
+
+      - name: Build unsigned device app
+        working-directory: cybermic
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project CyberMic.xcodeproj \
+            -scheme CyberMic \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            build
+
+      - name: Package IPA
+        working-directory: cybermic
+        run: |
+          APP="build/Build/Products/Release-iphoneos/CyberMic.app"
+          test -d "$APP"
+          mkdir -p Payload
+          cp -R "$APP" Payload/
+          zip -qry CyberMic-Unsigned.ipa Payload
+          shasum -a 256 CyberMic-Unsigned.ipa
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: CyberMic-Unsigned
+          path: cybermic/CyberMic-Unsigned.ipa
+          if-no-files-found: error
+          retention-days: 7
