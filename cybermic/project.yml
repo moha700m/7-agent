@@ -8,8 +8,6 @@ targets:
     deploymentTarget: "18.2"
     sources:
       - CyberMic
-    info:
-      path: CyberMic/Info.plist
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.moha700m.cybermic
@@ -17,3 +15,5 @@ targets:
         SWIFT_VERSION: 5.0
         TARGETED_DEVICE_FAMILY: "1,2"
         CODE_SIGN_STYLE: Automatic
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: CyberMic/Info.plist
