@@ -43,12 +43,37 @@ final class CyberMicBridge: ObservableObject {
     }
 
     func requestInjectionPermission() async {
-        let p = await AVAudioApplication.requestMicrophoneInjectionPermission()
-        updatePermission()
-        if p == .granted {
-            message = "تم السماح. الآن اضغط تشغيل المايك الرقمي."
+        if #available(iOS 18.2, *) {
+            let current = AVAudioApplication.shared.microphoneInjectionPermission
+
+            switch current {
+            case .serviceDisabled:
+                permissionText = "Add Audio in Calls مقفل"
+                message = "فعّل Add Audio in Calls من الإعدادات أولاً، ثم ارجع للتطبيق."
+                return
+            case .granted:
+                permissionText = "مسموح"
+                message = "الإذن مسموح مسبقاً. تقدر تشغل المايك الرقمي الآن."
+                return
+            case .denied:
+                permissionText = "مرفوض"
+                message = "الإذن مرفوض. غيّره من Add Audio in Calls في الإعدادات."
+                return
+            case .undetermined:
+                let p = await AVAudioApplication.requestMicrophoneInjectionPermission()
+                updatePermission()
+                if p == .granted {
+                    message = "تم السماح. الآن اضغط تشغيل المايك الرقمي."
+                } else {
+                    message = "ما تم السماح. راجع Add Audio in Calls في الإعدادات."
+                }
+            @unknown default:
+                permissionText = "غير معروف"
+                message = "حالة الإذن غير معروفة على هذا الإصدار."
+            }
         } else {
-            message = "ما تم السماح. تأكد من Add Audio in Calls في إعدادات Accessibility."
+            permissionText = "غير مدعوم"
+            message = "Microphone Injection يحتاج iOS 18.2 أو أحدث."
         }
     }
 
