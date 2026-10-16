@@ -1,0 +1,71 @@
+name: Build ESP32 Agent IPA
+
+on:
+  push:
+    branches:
+      - build-iphone-agent-ipa
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-26
+    steps:
+      - name: Checkout ESP32 iPhone Agent source
+        uses: actions/checkout@v5
+        with:
+          repository: onehumanbeing/esp32-iphone-agent
+          ref: main
+          path: source
+
+      - name: Configure unsigned ESign build
+        shell: bash
+        run: |
+          cat > source/ios/Config/Local.xcconfig <<'EOF'
+          DEVELOPMENT_TEAM =
+          IA_BUNDLE_ID = com.moha700m.esp32agent
+          IA_ENTITLEMENTS =
+          IA_WIDGET_ENTITLEMENTS =
+          IA_PRESET_BASE_URL =
+          IA_PRESET_MODEL =
+          IA_PRESET_KEY =
+          EOF
+
+      - name: Build unsigned iPhone app
+        shell: bash
+        run: |
+          cd source/ios
+          xcodebuild \
+            -project IPhoneAgent.xcodeproj \
+            -scheme IPhoneAgent \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build-device \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            build
+
+      - name: Package ESign-friendly IPA
+        shell: bash
+        run: |
+          APP="source/ios/build-device/Build/Products/Release-iphoneos/IPhoneAgent.app"
+          test -d "$APP"
+          rm -rf Payload
+          mkdir -p Payload
+          cp -R "$APP" Payload/
+          # The widget extension is optional for the core agent and complicates sideload signing.
+          rm -rf Payload/IPhoneAgent.app/PlugIns
+          /usr/bin/zip -qry ESP32-Agent-ESign-Unsigned.ipa Payload
+          ls -lh ESP32-Agent-ESign-Unsigned.ipa
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: ESP32-Agent-ESign-Unsigned
+          path: ESP32-Agent-ESign-Unsigned.ipa
+          if-no-files-found: error
+          retention-days: 7
