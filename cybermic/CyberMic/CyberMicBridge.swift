@@ -82,11 +82,14 @@ final class CyberMicBridge: ObservableObject {
         guard listener == nil else { return }
         do {
             let l = try NWListener(using: .udp, on: 8767)
+            let networkQueue = queue
             l.newConnectionHandler = { [weak self] connection in
                 guard let self else { return }
-                self.connections.append(connection)
-                connection.start(queue: self.queue)
+                connection.start(queue: networkQueue)
                 self.receive(on: connection)
+                Task { @MainActor in
+                    self.connections.append(connection)
+                }
             }
             l.stateUpdateHandler = { [weak self] state in
                 Task { @MainActor in
