@@ -1,0 +1,19 @@
+name: CyberMic
+options:
+  bundleIdPrefix: com.moha700m
+targets:
+  CyberMic:
+    type: application
+    platform: iOS
+    deploymentTarget: "18.2"
+    sources:
+      - CyberMic
+    info:
+      path: CyberMic/Info.plist
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.moha700m.cybermic
+        PRODUCT_NAME: CyberMic
+        SWIFT_VERSION: 5.0
+        TARGETED_DEVICE_FAMILY: "1,2"
+        CODE_SIGN_STYLE: Automatic
