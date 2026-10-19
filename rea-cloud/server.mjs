@@ -13,6 +13,8 @@ const ACCESS_KEY = process.env.ACCESS_KEY || "";
 const MAX_UPLOAD = 25 * 1024 * 1024;
 const MAX_UNZIPPED = 120 * 1024 * 1024;
 const REA_BIN = path.join(process.cwd(), "node_modules", ".bin", "rea");
+const GHIDRA_BIN = path.join(process.env.GHIDRA_INSTALL_DIR || "", "support", "analyzeHeadless");
+const JADX_JAR = process.env.REA_JADX_MCP_JAR || "";
 
 function send(res, status, body, type = "application/json; charset=utf-8") {
   res.writeHead(status, {
@@ -24,6 +26,41 @@ function send(res, status, body, type = "application/json; charset=utf-8") {
   res.end(typeof body === "string" ? body : JSON.stringify(body));
 }
 
+async function exists(p) {
+  try { await fsp.access(p); return true; } catch { return false; }
+}
+
+const readinessPromise = (async () => {
+  const tools = {
+    rea: { installed: false, version: null },
+    java: { installed: false, version: null },
+    ghidra: { installed: false, version: "12.1.4" },
+    jadx: { installed: false, version: "0.7.1" },
+    frida: { installed: false, version: "17.23.2" },
+  };
+
+  try {
+    const { stdout } = await execFileAsync(REA_BIN, ["--version"], { timeout: 10000 });
+    tools.rea = { installed: true, version: stdout.trim() || "6.7.0" };
+  } catch {}
+
+  try {
+    const { stdout, stderr } = await execFileAsync("java", ["-version"], { timeout: 10000 });
+    const line = (stderr || stdout || "").split("\n")[0].trim();
+    tools.java = { installed: true, version: line || "JDK 21" };
+  } catch {}
+
+  tools.ghidra.installed = await exists(GHIDRA_BIN);
+  tools.jadx.installed = await exists(JADX_JAR);
+
+  try {
+    await import("frida");
+    tools.frida.installed = true;
+  } catch {}
+
+  return tools;
+})();
+
 function html(keyPrefill = "") {
   const safeKey = keyPrefill.replace(/[&<>"']/g, "");
   return `<!doctype html>
@@ -33,20 +70,25 @@ function html(keyPrefill = "") {
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>REA Cloud</title>
 <style>
-:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#0b0d10;color:#f5f7fb;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.wrap{max-width:760px;margin:auto;padding:24px 16px 60px}.card{background:#141820;border:1px solid #252b36;border-radius:20px;padding:18px;margin:14px 0;box-shadow:0 12px 36px #0005}h1{font-size:28px;margin:0 0 8px}.muted{color:#aab3c2;line-height:1.7}.pill{display:inline-block;padding:7px 10px;border-radius:999px;background:#1b2431;border:1px solid #2b394c;font-size:13px;margin:4px 0}label{display:block;margin:14px 0 7px;font-weight:700}input,button{width:100%;font:inherit;border-radius:14px;border:1px solid #303848;background:#0d1117;color:#fff;padding:13px}input[type=file]{padding:11px}button{background:#fff;color:#111;font-weight:800;margin-top:14px;border:0;cursor:pointer}button:disabled{opacity:.55}pre{white-space:pre-wrap;word-break:break-word;background:#090c10;border:1px solid #252b36;border-radius:14px;padding:13px;max-height:55vh;overflow:auto;font-size:12px;direction:ltr;text-align:left}.ok{color:#82e6a8}.bad{color:#ff9b9b}.small{font-size:12px}
+:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#0b0d10;color:#f5f7fb;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.wrap{max-width:760px;margin:auto;padding:24px 16px 60px}.card{background:#141820;border:1px solid #252b36;border-radius:20px;padding:18px;margin:14px 0;box-shadow:0 12px 36px #0005}h1{font-size:28px;margin:0 0 8px}.muted{color:#aab3c2;line-height:1.7}.pill{display:inline-block;padding:7px 10px;border-radius:999px;background:#1b2431;border:1px solid #2b394c;font-size:13px;margin:4px 5px 4px 0}label{display:block;margin:14px 0 7px;font-weight:700}input,button{width:100%;font:inherit;border-radius:14px;border:1px solid #303848;background:#0d1117;color:#fff;padding:13px}input[type=file]{padding:11px}button{background:#fff;color:#111;font-weight:800;margin-top:14px;border:0;cursor:pointer}button:disabled{opacity:.55}pre{white-space:pre-wrap;word-break:break-word;background:#090c10;border:1px solid #252b36;border-radius:14px;padding:13px;max-height:55vh;overflow:auto;font-size:12px;direction:ltr;text-align:left}.ok{color:#82e6a8}.bad{color:#ff9b9b}.small{font-size:12px}.tools{display:flex;gap:7px;flex-wrap:wrap}.tool{padding:7px 10px;border:1px solid #303848;border-radius:999px;font-size:12px}.tool.good{border-color:#29583b;color:#93e9ae}.tool.no{border-color:#673737;color:#ffabab}
 </style>
 </head>
 <body><main class="wrap">
 <div class="card">
 <h1>REA Cloud</h1>
-<div class="pill">Reverse Engineer Anything · Static JS/Electron</div>
-<p class="muted">نسخة سحابية للجوال. ارفع ZIP / ASAR / ملف JavaScript أو حط رابط GitHub عام. التحليل هنا <b>ثابت فقط</b> وما يشغّل الملف المرفوع.</p>
+<div class="pill">REA 6.7.0</div>
+<div class="pill">Ghidra 12.1.4</div>
+<div class="pill">JADX 0.7.1</div>
+<div class="pill">Frida 17.23.2</div>
+<p class="muted">نسخة سحابية للجوال. التحليل الافتراضي ثابت وما يشغّل الملفات المرفوعة.</p>
+<div id="tools" class="tools"><span class="tool">جاري فحص الأدوات…</span></div>
 </div>
 <div class="card">
 <label>مفتاح الدخول</label>
 <input id="key" type="password" autocomplete="off" value="${safeKey}" placeholder="ACCESS KEY">
 <label>رفع ملف من الآيفون</label>
-<input id="file" type="file" accept=".zip,.asar,.js,.mjs,.cjs,.json,.html">
+<input id="file" type="file" accept=".zip,.asar,.js,.mjs,.cjs,.json,.html,.apk,.exe,.dll,.so,.elf,.bin,.dylib">
+<p class="muted small">JS/Electron → REA static · APK → JADX · EXE/DLL/ELF/SO → Ghidra</p>
 <label>أو رابط GitHub عام</label>
 <input id="url" type="url" placeholder="https://github.com/owner/repo">
 <button id="go">حلّل بـ REA</button>
@@ -61,6 +103,12 @@ function html(keyPrefill = "") {
 const $=s=>document.querySelector(s); let last="";
 const qs=new URLSearchParams(location.search); if(qs.get("key")) $("#key").value=qs.get("key");
 if(sessionStorage.reaKey && !$("#key").value) $("#key").value=sessionStorage.reaKey;
+
+fetch("/health").then(r=>r.json()).then(h=>{
+  const items=Object.entries(h.tools||{}).map(([name,v])=>'<span class="tool '+(v.installed?'good':'no')+'">'+name.toUpperCase()+' '+(v.installed?'✓':'✕')+(v.version?' · '+String(v.version).replace(/[<>&]/g,''):'')+'</span>');
+  $("#tools").innerHTML=items.join("");
+}).catch(()=>{$("#tools").innerHTML='<span class="tool no">تعذر فحص الأدوات</span>'});
+
 $("#go").onclick=async()=>{
   const key=$("#key").value.trim(); sessionStorage.reaKey=key;
   const file=$("#file").files[0]; const url=$("#url").value.trim();
@@ -73,7 +121,7 @@ $("#go").onclick=async()=>{
     if(!r.ok) throw new Error(data.error||"فشل التحليل");
     last=data.report||JSON.stringify(data,null,2);
     $("#out").textContent=last;
-    $("#status").innerHTML='<span class="ok">تم التحليل.</span>'+ (data.truncated?" التقرير مختصر بسبب الحجم.":"");
+    $("#status").innerHTML='<span class="ok">تم التحليل عبر '+String(data.engine||"REA").toUpperCase()+'.</span>'+ (data.truncated?" التقرير مختصر بسبب الحجم.":"");
     $("#download").style.display="block";
   }catch(e){$("#status").innerHTML='<span class="bad">'+e.message+'</span>';$("#out").textContent=e.stack||e.message}
   finally{$("#go").disabled=false}
@@ -141,7 +189,7 @@ function githubDownloadUrl(input) {
 
 async function downloadLimited(input) {
   const info = githubDownloadUrl(input);
-  const r = await fetch(info.url, { redirect: "follow", headers: { "user-agent": "REA-Cloud-Mobile/1.0" } });
+  const r = await fetch(info.url, { redirect: "follow", headers: { "user-agent": "REA-Cloud-Mobile/1.1" } });
   if (!r.ok) throw new Error(`فشل تنزيل GitHub: HTTP ${r.status}`);
   const len = Number(r.headers.get("content-length") || 0);
   if (len && len > MAX_UPLOAD) throw new Error("التحميل أكبر من 25MB");
@@ -169,14 +217,38 @@ function inspectZip(zipPath, dest) {
   zip.extractAllTo(dest, true, false);
 }
 
+async function runRea(args, timeout = 120000) {
+  const { stdout, stderr } = await execFileAsync(REA_BIN, args, {
+    cwd: process.cwd(),
+    timeout,
+    maxBuffer: 12 * 1024 * 1024,
+    env: { ...process.env, CI: "1" }
+  });
+  const combined = (stdout || "").trim();
+  const limit = 1500000;
+  return {
+    report: combined.length > limit ? combined.slice(0, limit) + "\n\n[TRUNCATED]" : combined,
+    truncated: combined.length > limit,
+    stderr: (stderr || "").slice(0, 4000)
+  };
+}
+
 async function analyzeBuffer(data, filename) {
   const tmp = await fsp.mkdtemp(path.join(os.tmpdir(), "rea-cloud-"));
   try {
     const uploaded = path.join(tmp, safeName(filename));
     await fsp.writeFile(uploaded, data);
-    let target = uploaded;
     const ext = path.extname(uploaded).toLowerCase();
 
+    if (ext === ".apk") {
+      return { engine: "jadx", ...(await runRea(["inspect-android-package", uploaded, "--json"], 120000)) };
+    }
+
+    if ([".exe",".dll",".so",".elf",".dylib"].includes(ext)) {
+      return { engine: "ghidra", ...(await runRea(["analyze", uploaded, "--provider", "ghidra", "--json"], 330000)) };
+    }
+
+    let target = uploaded;
     if (ext === ".zip") {
       const dest = path.join(tmp, "extracted");
       await fsp.mkdir(dest);
@@ -189,27 +261,13 @@ async function analyzeBuffer(data, filename) {
       await fsp.mkdir(dest);
       await fsp.copyFile(uploaded, path.join(dest, path.basename(uploaded)));
       target = dest;
+    } else if (ext === ".bin") {
+      throw new Error("ملف BIN الخام يحتاج تحديد المعمارية/نقطة الدخول قبل تشغيل Ghidra");
     } else {
-      throw new Error("هذه النسخة تدعم ZIP / ASAR / JS / MJS / CJS / JSON / HTML للتحليل الثابت");
+      throw new Error("الأنواع المدعومة: ZIP / ASAR / JS / APK / EXE / DLL / SO / ELF / DYLIB");
     }
 
-    const { stdout, stderr } = await execFileAsync(
-      REA_BIN,
-      ["analyze-javascript-application", target, "--json"],
-      {
-        cwd: process.cwd(),
-        timeout: 120000,
-        maxBuffer: 12 * 1024 * 1024,
-        env: { ...process.env, CI: "1" }
-      }
-    );
-    const combined = (stdout || "").trim();
-    const limit = 1500000;
-    return {
-      report: combined.length > limit ? combined.slice(0, limit) + "\n\n[TRUNCATED]" : combined,
-      truncated: combined.length > limit,
-      stderr: (stderr || "").slice(0, 4000)
-    };
+    return { engine: "rea-js", ...(await runRea(["analyze-javascript-application", target, "--json"], 120000)) };
   } finally {
     await fsp.rm(tmp, { recursive: true, force: true }).catch(()=>{});
   }
@@ -219,7 +277,12 @@ const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
     if (req.method === "GET" && url.pathname === "/health") {
-      return send(res, 200, { ok: true, service: "rea-cloud", rea: "6.7.0", mode: "static-javascript-electron" });
+      return send(res, 200, {
+        ok: true,
+        service: "rea-cloud",
+        mode: "static-analysis",
+        tools: await readinessPromise
+      });
     }
     if (req.method === "GET" && url.pathname === "/") {
       return send(res, 200, html(url.searchParams.get("key") || ""), "text/html; charset=utf-8");
@@ -239,7 +302,7 @@ const server = http.createServer(async (req, res) => {
     }
     return send(res, 404, { error: "Not found" });
   } catch (err) {
-    const msg = err?.killed ? "انتهت مهلة التحليل (120 ثانية)" : String(err?.message || err);
+    const msg = err?.killed ? "انتهت مهلة التحليل" : String(err?.message || err);
     const detail = String(err?.stderr || "").slice(0, 4000);
     console.error(err);
     return send(res, 500, { error: msg, detail });
