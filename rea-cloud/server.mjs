@@ -39,10 +39,14 @@ const readinessPromise = (async () => {
     frida: { installed: false, version: "17.23.2" },
   };
 
-  try {
-    const { stdout } = await execFileAsync(REA_BIN, ["--version"], { timeout: 10000 });
-    tools.rea = { installed: true, version: stdout.trim() || "6.7.0" };
-  } catch {}
+  tools.rea.installed = await exists(REA_BIN);
+  if (tools.rea.installed) {
+    tools.rea.version = "6.7.0";
+    try {
+      const { stdout } = await execFileAsync(process.execPath, [REA_BIN, "--version"], { timeout: 10000 });
+      tools.rea.version = stdout.trim() || "6.7.0";
+    } catch {}
+  }
 
   try {
     const { stdout, stderr } = await execFileAsync("java", ["-version"], { timeout: 10000 });
