@@ -52,6 +52,72 @@ jobs:
           assert '@State private var noteText = ""' in path.read_text()
           PY
 
+      - name: Normalize modern iPhone project metadata
+        run: |
+          cat > source/project.yml <<'YAML'
+          name: CYBERMAX
+          options:
+            bundleIdPrefix: com.cybermax
+            deploymentTarget:
+              iOS: '16.0'
+          settings:
+            base:
+              SWIFT_VERSION: 5.0
+              IPHONEOS_DEPLOYMENT_TARGET: 16.0
+              SUPPORTS_MACCATALYST: NO
+              SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD: NO
+          targets:
+            CYBERMAX:
+              type: application
+              platform: iOS
+              deploymentTarget: '16.0'
+              sources:
+                - path: CYBERMAX
+                  excludes:
+                    - Info.plist
+              info:
+                path: CYBERMAX/Info.plist
+                properties:
+                  CFBundleDisplayName: CYBERMAX
+                  CFBundleIdentifier: $(PRODUCT_BUNDLE_IDENTIFIER)
+                  CFBundleInfoDictionaryVersion: '6.0'
+                  CFBundleName: $(PRODUCT_NAME)
+                  CFBundlePackageType: APPL
+                  CFBundleShortVersionString: $(MARKETING_VERSION)
+                  CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+                  LSRequiresIPhoneOS: true
+                  UIRequiresFullScreen: true
+                  UILaunchScreen: {}
+                  UISupportedInterfaceOrientations:
+                    - UIInterfaceOrientationPortrait
+                  NSLocalNetworkUsageDescription: CYBERMAX uses your local network only for authorized defensive and lab checks you start.
+                  NSCameraUsageDescription: Camera access is reserved for future QR security scanning features.
+              settings:
+                base:
+                  PRODUCT_BUNDLE_IDENTIFIER: com.cybermax.app
+                  PRODUCT_NAME: CYBERMAX
+                  MARKETING_VERSION: 1.0.0
+                  CURRENT_PROJECT_VERSION: 1
+                  TARGETED_DEVICE_FAMILY: '1'
+                  SUPPORTS_MACCATALYST: NO
+                  SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD: NO
+                  CODE_SIGN_STYLE: Manual
+                  CODE_SIGNING_ALLOWED: NO
+                  CODE_SIGNING_REQUIRED: NO
+                  DEVELOPMENT_TEAM: ''
+              scheme:
+                testTargets: []
+          schemes:
+            CYBERMAX:
+              build:
+                targets:
+                  CYBERMAX: all
+              run:
+                config: Debug
+              archive:
+                config: Release
+          YAML
+
       - name: Verify modern iPhone configuration
         run: |
           grep -q "iOS: '16.0'" source/project.yml
