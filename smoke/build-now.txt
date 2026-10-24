@@ -1,0 +1,1 @@
+Run BuildDrop ZIP smoke test on CYBERMAX sample.
