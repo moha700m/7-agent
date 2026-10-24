@@ -12,6 +12,7 @@ jobs:
   build:
     runs-on: macos-latest
     timeout-minutes: 30
+
     steps:
       - name: Checkout branch
         uses: actions/checkout@v4
@@ -36,6 +37,20 @@ jobs:
           unzip -q CYBERMAX-source-modern.zip -d source
           test -f source/project.yml
           test -f source/CYBERMAX/Info.plist
+
+      - name: Apply source fixes
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('source/CYBERMAX/Views/Screens/IncidentLogView.swift')
+          text = path.read_text()
+          text = text.replace('@State private var body = ""', '@State private var noteText = ""')
+          text = text.replace('text: $body', 'text: $noteText')
+          text = text.replace('store.add(title: clean, body: body)', 'store.add(title: clean, body: noteText)')
+          text = text.replace('title = ""; body = ""', 'title = ""; noteText = ""')
+          path.write_text(text)
+          assert '@State private var noteText = ""' in path.read_text()
+          PY
 
       - name: Verify modern iPhone configuration
         run: |
