@@ -1,0 +1,167 @@
+name: BuildDrop ZIP Smoke Test
+
+on:
+  push:
+    branches: [ ipa-builder-platform ]
+    paths:
+      - 'smoke/build-now.txt'
+
+permissions:
+  contents: read
+
+jobs:
+  zip-smoke:
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout builder branch
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Checkout ZIP sample source
+        uses: actions/checkout@v4
+        with:
+          ref: cybermax-ios-modern
+          path: sample-ref
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Reconstruct uploaded-style ZIP sample
+        run: |
+          set -euo pipefail
+          cat sample-ref/source-parts/part-* > sample.b64
+          python3 - <<'PY'
+          import base64, pathlib
+          encoded = pathlib.Path("sample.b64").read_text()
+          pathlib.Path("sample.zip").write_bytes(base64.b64decode(encoded))
+          PY
+          unzip -t sample.zip
+          test -s sample.zip
+
+      - name: Safely extract ZIP
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path, PurePosixPath
+          from zipfile import ZipFile
+
+          archive = Path("sample.zip")
+          out = Path("project")
+          out.mkdir(exist_ok=True)
+          total = 0
+          count = 0
+          with ZipFile(archive) as z:
+              for info in z.infolist():
+                  p = PurePosixPath(info.filename)
+                  if p.is_absolute() or ".." in p.parts:
+                      raise SystemExit(f"Unsafe archive path: {info.filename}")
+                  count += 1
+                  total += info.file_size
+                  if count > 60000:
+                      raise SystemExit("Archive contains too many files")
+                  if total > 3 * 1024 * 1024 * 1024:
+                      raise SystemExit("Expanded project is too large")
+              z.extractall(out)
+          print(f"Extracted {count} files")
+          PY
+
+      - name: Normalize known sample source
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("project/CYBERMAX/Views/Screens/IncidentLogView.swift")
+          text = path.read_text()
+          text = text.replace('@State private var body = ""', '@State private var noteText = ""')
+          text = text.replace('text: $body', 'text: $noteText')
+          text = text.replace('store.add(title: clean, body: body)', 'store.add(title: clean, body: noteText)')
+          text = text.replace('title = ""; body = ""', 'title = ""; noteText = ""')
+          path.write_text(text)
+          PY
+
+      - name: Detect project like BuildDrop
+        id: detect
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' > detect.txt
+          from pathlib import Path
+          base = Path("project")
+          candidates = []
+          for p in base.rglob("*"):
+              try:
+                  depth = len(p.relative_to(base).parts)
+              except Exception:
+                  continue
+              if depth > 6:
+                  continue
+              if p.name == "pubspec.yaml" and (p.parent / "ios").exists():
+                  candidates.append((0, depth, "flutter", p.parent))
+              elif p.name == "package.json" and (p.parent / "ios").exists():
+                  try:
+                      s = p.read_text(errors="ignore")
+                  except Exception:
+                      s = ""
+                  if "react-native" in s:
+                      candidates.append((1, depth, "react-native", p.parent))
+              elif p.name == "project.yml":
+                  candidates.append((2, depth, "xcode", p.parent))
+              elif p.suffix in {".xcodeproj", ".xcworkspace"} and "Pods" not in p.parts:
+                  candidates.append((3, depth, "xcode", p.parent))
+          if not candidates:
+              raise SystemExit("No supported iOS project found")
+          candidates.sort(key=lambda x:(x[0], x[1]))
+          _, _, kind, root = candidates[0]
+          print(f"{kind}|{root}")
+          PY
+          IFS='|' read -r KIND ROOT < detect.txt
+          echo "kind=$KIND" >> "$GITHUB_OUTPUT"
+          echo "root=$ROOT" >> "$GITHUB_OUTPUT"
+          echo "Detected $KIND at $ROOT"
+
+      - name: Prepare Xcode project
+        if: steps.detect.outputs.kind == 'xcode'
+        env:
+          ROOT: ${{ steps.detect.outputs.root }}
+        run: |
+          set -euo pipefail
+          if ! find "$ROOT" -maxdepth 4 \( -name '*.xcodeproj' -o -name '*.xcworkspace' \) -print -quit | grep -q .; then
+            PROJECT_YML="$(find "$ROOT" -maxdepth 3 -name project.yml -print -quit)"
+            test -n "$PROJECT_YML"
+            brew install xcodegen
+            cd "$(dirname "$PROJECT_YML")"
+            xcodegen generate
+          fi
+
+      - name: Build unsigned iPhone app
+        env:
+          ROOT: ${{ steps.detect.outputs.root }}
+        run: |
+          set -euo pipefail
+          PROJECT="$(find "$ROOT" -maxdepth 5 -type d -name '*.xcodeproj' ! -path '*/Pods/*' | head -1)"
+          test -n "$PROJECT"
+          LIST="$(xcodebuild -project "$PROJECT" -list -json)"
+          SCHEME="$(printf '%s' "$LIST" | jq -r '.project.schemes[0] // empty')"
+          test -n "$SCHEME"
+          xcodebuild             -project "$PROJECT"             -scheme "$SCHEME"             -configuration Release             -sdk iphoneos             -destination 'generic/platform=iOS'             -derivedDataPath "$GITHUB_WORKSPACE/derived"             CODE_SIGNING_ALLOWED=NO             CODE_SIGNING_REQUIRED=NO             CODE_SIGN_IDENTITY=""             DEVELOPMENT_TEAM=""             build
+
+      - name: Package unsigned IPA
+        run: |
+          set -euo pipefail
+          APP="$(find "$GITHUB_WORKSPACE/derived/Build/Products/Release-iphoneos" -maxdepth 2 -type d -name '*.app' | head -1)"
+          test -n "$APP"
+          rm -rf Payload BuildDrop-smoke-unsigned.ipa
+          mkdir Payload
+          cp -R "$APP" Payload/
+          zip -qry BuildDrop-smoke-unsigned.ipa Payload
+          unzip -t BuildDrop-smoke-unsigned.ipa
+          test -s BuildDrop-smoke-unsigned.ipa
+
+      - name: Upload smoke-test IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: BuildDrop-smoke-unsigned-ipa
+          path: BuildDrop-smoke-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 3
