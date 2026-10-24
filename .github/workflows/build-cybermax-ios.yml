@@ -1,0 +1,85 @@
+name: Build CYBERMAX Unsigned IPA
+
+on:
+  push:
+    branches: [ cybermax-ios-modern ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+
+      - name: Show Xcode
+        run: |
+          sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+          xcodebuild -version
+          sw_vers
+
+      - name: Expand CYBERMAX source
+        run: |
+          rm -rf source
+          mkdir source
+          unzip -q CYBERMAX-source-modern.zip -d source
+          test -f source/project.yml
+          test -f source/CYBERMAX/Info.plist
+
+      - name: Verify modern iPhone configuration
+        run: |
+          grep -q "iOS: '16.0'" source/project.yml
+          grep -q "TARGETED_DEVICE_FAMILY: '1'" source/project.yml
+          /usr/libexec/PlistBuddy -c "Print :UILaunchScreen" source/CYBERMAX/Info.plist >/dev/null
+          test "$(/usr/libexec/PlistBuddy -c 'Print :UIRequiresFullScreen' source/CYBERMAX/Info.plist)" = "true"
+          echo "Modern full-screen iPhone configuration verified."
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: source
+        run: xcodegen generate
+
+      - name: Build unsigned iPhone app
+        working-directory: source
+        run: |
+          set -o pipefail
+          xcodebuild             -project CYBERMAX.xcodeproj             -scheme CYBERMAX             -configuration Release             -sdk iphoneos             -derivedDataPath build             CODE_SIGNING_ALLOWED=NO             CODE_SIGNING_REQUIRED=NO             CODE_SIGN_IDENTITY=""             DEVELOPMENT_TEAM=""             clean build | tee xcodebuild.log
+
+      - name: Verify built bundle
+        run: |
+          APP_PATH="source/build/Build/Products/Release-iphoneos/CYBERMAX.app"
+          test -d "$APP_PATH"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP_PATH/Info.plist"
+
+      - name: Package unsigned IPA
+        run: |
+          APP_PATH="source/build/Build/Products/Release-iphoneos/CYBERMAX.app"
+          rm -rf Payload CYBERMAX-unsigned.ipa
+          mkdir -p Payload
+          cp -R "$APP_PATH" Payload/
+          /usr/bin/zip -qry CYBERMAX-unsigned.ipa Payload
+          test -s CYBERMAX-unsigned.ipa
+          /usr/bin/unzip -l CYBERMAX-unsigned.ipa | head -60
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: CYBERMAX-unsigned-ipa
+          path: CYBERMAX-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload build log if failed
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: CYBERMAX-build-log
+          path: source/xcodebuild.log
+          if-no-files-found: ignore
+          retention-days: 7

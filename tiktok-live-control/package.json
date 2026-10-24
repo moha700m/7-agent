@@ -1,8 +1,0 @@
-{
-  "name": "tiktok-live-control",
-  "private": true,
-  "version": "1.0.0",
-  "scripts": {
-    "test": "node --test tests/proxy.test.cjs"
-  }
-}
