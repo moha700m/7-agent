@@ -1,0 +1,239 @@
+name: BuildDrop iOS IPA
+
+on:
+  push:
+    branches: [ ipa-builder-platform ]
+    paths:
+      - 'jobs/*.json'
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout trigger branch
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Resolve job
+        id: job
+        shell: bash
+        run: |
+          set -euo pipefail
+          JOB_FILE="$(jq -r '.head_commit.added[]?, .head_commit.modified[]?' "$GITHUB_EVENT_PATH" | grep '^jobs/.*\.json$' | tail -1)"
+          test -n "$JOB_FILE"
+          JOB_ID="$(jq -r '.job_id' "$JOB_FILE")"
+          test -n "$JOB_ID"
+          echo "job_id=$JOB_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Claim job with GitHub OIDC
+        id: oidc
+        shell: bash
+        env:
+          JOB_ID: ${{ steps.job.outputs.job_id }}
+          BUILDDROP_BASE: https://builddrop-ios.saad-cloud-2026.workers.dev
+        run: |
+          set -euo pipefail
+          OIDC="$(curl -fsSL -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=builddrop-ios" | jq -r '.value')"
+          test -n "$OIDC"
+          curl -fsS -X POST -H "Authorization: Bearer $OIDC" "$BUILDDROP_BASE/api/action/claim/$JOB_ID" >/dev/null
+          echo "oidc=$OIDC" >> "$GITHUB_OUTPUT"
+
+      - name: Download uploaded project
+        shell: bash
+        env:
+          JOB_ID: ${{ steps.job.outputs.job_id }}
+          OIDC: ${{ steps.oidc.outputs.oidc }}
+          BUILDDROP_BASE: https://builddrop-ios.saad-cloud-2026.workers.dev
+        run: |
+          set -euo pipefail
+          curl -fsS -X POST -H "Authorization: Bearer $OIDC" -H "Content-Type: application/json"             --data '{"status":"building","message":"GitHub macOS runner started"}'             "$BUILDDROP_BASE/api/action/status/$JOB_ID" >/dev/null
+          curl -fsSL -H "Authorization: Bearer $OIDC" "$BUILDDROP_BASE/api/action/source/$JOB_ID" -o project.zip
+          test -s project.zip
+
+      - name: Safely extract project
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path, PurePosixPath
+          from zipfile import ZipFile
+
+          archive = Path("project.zip")
+          out = Path("project")
+          out.mkdir(exist_ok=True)
+          total = 0
+          count = 0
+          with ZipFile(archive) as z:
+              for info in z.infolist():
+                  p = PurePosixPath(info.filename)
+                  if p.is_absolute() or ".." in p.parts:
+                      raise SystemExit(f"Unsafe archive path: {info.filename}")
+                  count += 1
+                  total += info.file_size
+                  if count > 60000:
+                      raise SystemExit("Archive contains too many files")
+                  if total > 3 * 1024 * 1024 * 1024:
+                      raise SystemExit("Expanded project is too large")
+              z.extractall(out)
+          print(f"Extracted {count} files")
+          PY
+
+      - name: Detect project type
+        id: detect
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' > detect.txt
+          from pathlib import Path
+          base = Path("project")
+          candidates = []
+          for p in base.rglob("*"):
+              try:
+                  depth = len(p.relative_to(base).parts)
+              except Exception:
+                  continue
+              if depth > 6:
+                  continue
+              if p.name == "pubspec.yaml" and (p.parent / "ios").exists():
+                  candidates.append((0, depth, "flutter", p.parent))
+              elif p.name == "package.json" and (p.parent / "ios").exists():
+                  try:
+                      s = p.read_text(errors="ignore")
+                  except Exception:
+                      s = ""
+                  if "react-native" in s:
+                      candidates.append((1, depth, "react-native", p.parent))
+              elif p.name == "project.yml":
+                  candidates.append((2, depth, "xcode", p.parent))
+              elif p.suffix in {".xcodeproj", ".xcworkspace"} and "Pods" not in p.parts:
+                  candidates.append((3, depth, "xcode", p.parent))
+          if not candidates:
+              raise SystemExit("No supported iOS project found")
+          candidates.sort(key=lambda x:(x[0], x[1]))
+          _, _, kind, root = candidates[0]
+          print(f"{kind}|{root}")
+          PY
+          IFS='|' read -r KIND ROOT < detect.txt
+          echo "kind=$KIND" >> "$GITHUB_OUTPUT"
+          echo "root=$ROOT" >> "$GITHUB_OUTPUT"
+          echo "Detected $KIND at $ROOT"
+
+      - name: Setup Flutter
+        if: steps.detect.outputs.kind == 'flutter'
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Build Flutter project
+        if: steps.detect.outputs.kind == 'flutter'
+        shell: bash
+        env:
+          ROOT: ${{ steps.detect.outputs.root }}
+        run: |
+          set -euo pipefail
+          cd "$ROOT"
+          flutter pub get
+          flutter build ios --release --no-codesign
+          APP="$(find build/ios/iphoneos -maxdepth 2 -type d -name '*.app' | head -1)"
+          test -n "$APP"
+          realpath "$APP" > "$GITHUB_WORKSPACE/app-path.txt"
+
+      - name: Prepare React Native dependencies
+        if: steps.detect.outputs.kind == 'react-native'
+        shell: bash
+        env:
+          ROOT: ${{ steps.detect.outputs.root }}
+        run: |
+          set -euo pipefail
+          cd "$ROOT"
+          if [ -f package-lock.json ]; then npm ci; else npm install; fi
+          if [ -f ios/Podfile ]; then
+            cd ios
+            pod install --repo-update
+          fi
+
+      - name: Prepare Xcode project
+        if: steps.detect.outputs.kind != 'flutter'
+        shell: bash
+        env:
+          ROOT: ${{ steps.detect.outputs.root }}
+        run: |
+          set -euo pipefail
+          if ! find "$ROOT" -maxdepth 4 \( -name '*.xcodeproj' -o -name '*.xcworkspace' \) -print -quit | grep -q .; then
+            PROJECT_YML="$(find "$ROOT" -maxdepth 3 -name project.yml -print -quit)"
+            test -n "$PROJECT_YML"
+            brew install xcodegen
+            cd "$(dirname "$PROJECT_YML")"
+            xcodegen generate
+          fi
+
+      - name: Build Xcode or React Native project
+        if: steps.detect.outputs.kind != 'flutter'
+        shell: bash
+        env:
+          ROOT: ${{ steps.detect.outputs.root }}
+        run: |
+          set -euo pipefail
+          WORKSPACE="$(find "$ROOT" -maxdepth 5 -type d -name '*.xcworkspace' ! -path '*/Pods/*' | head -1 || true)"
+          PROJECT="$(find "$ROOT" -maxdepth 5 -type d -name '*.xcodeproj' ! -path '*/Pods/*' | head -1 || true)"
+
+          if [ -n "$WORKSPACE" ]; then
+            LIST="$(xcodebuild -workspace "$WORKSPACE" -list -json)"
+            SCHEME="$(printf '%s' "$LIST" | jq -r '.workspace.schemes[0] // empty')"
+            test -n "$SCHEME"
+            xcodebuild -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Release               -sdk iphoneos -destination 'generic/platform=iOS'               -derivedDataPath "$GITHUB_WORKSPACE/derived"               CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" DEVELOPMENT_TEAM="" build
+          else
+            test -n "$PROJECT"
+            LIST="$(xcodebuild -project "$PROJECT" -list -json)"
+            SCHEME="$(printf '%s' "$LIST" | jq -r '.project.schemes[0] // empty')"
+            test -n "$SCHEME"
+            xcodebuild -project "$PROJECT" -scheme "$SCHEME" -configuration Release               -sdk iphoneos -destination 'generic/platform=iOS'               -derivedDataPath "$GITHUB_WORKSPACE/derived"               CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" DEVELOPMENT_TEAM="" build
+          fi
+
+          APP="$(find "$GITHUB_WORKSPACE/derived/Build/Products/Release-iphoneos" -maxdepth 2 -type d -name '*.app' | head -1)"
+          test -n "$APP"
+          printf '%s' "$APP" > "$GITHUB_WORKSPACE/app-path.txt"
+
+      - name: Package unsigned IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="$(cat app-path.txt)"
+          test -d "$APP"
+          rm -rf Payload BuildDrop-unsigned.ipa
+          mkdir Payload
+          cp -R "$APP" Payload/
+          zip -qry BuildDrop-unsigned.ipa Payload
+          unzip -t BuildDrop-unsigned.ipa
+          test -s BuildDrop-unsigned.ipa
+
+      - name: Upload IPA back to BuildDrop
+        shell: bash
+        env:
+          JOB_ID: ${{ steps.job.outputs.job_id }}
+          BUILDDROP_BASE: https://builddrop-ios.saad-cloud-2026.workers.dev
+        run: |
+          set -euo pipefail
+          OIDC="$(curl -fsSL -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=builddrop-ios" | jq -r '.value')"
+          curl -fsS -X PUT -H "Authorization: Bearer $OIDC" -H "Content-Type: application/octet-stream"             --data-binary @BuildDrop-unsigned.ipa "$BUILDDROP_BASE/api/action/result/$JOB_ID" >/dev/null
+
+      - name: Report failure
+        if: failure()
+        shell: bash
+        env:
+          JOB_ID: ${{ steps.job.outputs.job_id }}
+          BUILDDROP_BASE: https://builddrop-ios.saad-cloud-2026.workers.dev
+        run: |
+          OIDC="$(curl -fsSL -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=builddrop-ios" | jq -r '.value' || true)"
+          if [ -n "$OIDC" ] && [ -n "$JOB_ID" ]; then
+            curl -fsS -X POST -H "Authorization: Bearer $OIDC" -H "Content-Type: application/json"               --data '{"status":"failed","message":"Build failed. Open the GitHub Action for detailed logs."}'               "$BUILDDROP_BASE/api/action/status/$JOB_ID" >/dev/null || true
+          fi
