@@ -16,14 +16,21 @@ jobs:
       - name: Checkout branch
         uses: actions/checkout@v4
 
-      - name: Show Xcode
+      - name: Show toolchain
         run: |
           sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
           xcodebuild -version
           sw_vers
 
-      - name: Expand CYBERMAX source
+      - name: Reconstruct CYBERMAX source
         run: |
+          cat source-parts/part-* > CYBERMAX-source-modern.b64
+          python3 - <<'PY'
+          import base64, pathlib
+          encoded = pathlib.Path('CYBERMAX-source-modern.b64').read_text()
+          pathlib.Path('CYBERMAX-source-modern.zip').write_bytes(base64.b64decode(encoded))
+          PY
+          unzip -t CYBERMAX-source-modern.zip
           rm -rf source
           mkdir source
           unzip -q CYBERMAX-source-modern.zip -d source
@@ -36,7 +43,7 @@ jobs:
           grep -q "TARGETED_DEVICE_FAMILY: '1'" source/project.yml
           /usr/libexec/PlistBuddy -c "Print :UILaunchScreen" source/CYBERMAX/Info.plist >/dev/null
           test "$(/usr/libexec/PlistBuddy -c 'Print :UIRequiresFullScreen' source/CYBERMAX/Info.plist)" = "true"
-          echo "Modern full-screen iPhone configuration verified."
+          echo "Modern iPhone full-screen configuration verified."
 
       - name: Install XcodeGen
         run: brew install xcodegen
@@ -45,17 +52,24 @@ jobs:
         working-directory: source
         run: xcodegen generate
 
+      - name: Validate modern simulator build
+        working-directory: source
+        run: |
+          set -o pipefail
+          xcodebuild             -project CYBERMAX.xcodeproj             -scheme CYBERMAX             -configuration Debug             -sdk iphonesimulator             -destination 'generic/platform=iOS Simulator'             -derivedDataPath sim-build             CODE_SIGNING_ALLOWED=NO             CODE_SIGNING_REQUIRED=NO             build | tee simulator-build.log
+
       - name: Build unsigned iPhone app
         working-directory: source
         run: |
           set -o pipefail
-          xcodebuild             -project CYBERMAX.xcodeproj             -scheme CYBERMAX             -configuration Release             -sdk iphoneos             -derivedDataPath build             CODE_SIGNING_ALLOWED=NO             CODE_SIGNING_REQUIRED=NO             CODE_SIGN_IDENTITY=""             DEVELOPMENT_TEAM=""             clean build | tee xcodebuild.log
+          xcodebuild             -project CYBERMAX.xcodeproj             -scheme CYBERMAX             -configuration Release             -sdk iphoneos             -destination 'generic/platform=iOS'             -derivedDataPath build             CODE_SIGNING_ALLOWED=NO             CODE_SIGNING_REQUIRED=NO             CODE_SIGN_IDENTITY=""             DEVELOPMENT_TEAM=""             clean build | tee xcodebuild.log
 
       - name: Verify built bundle
         run: |
           APP_PATH="source/build/Build/Products/Release-iphoneos/CYBERMAX.app"
           test -d "$APP_PATH"
           /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP_PATH/Info.plist"
+          /usr/libexec/PlistBuddy -c "Print :MinimumOSVersion" "$APP_PATH/Info.plist"
 
       - name: Package unsigned IPA
         run: |
@@ -65,7 +79,7 @@ jobs:
           cp -R "$APP_PATH" Payload/
           /usr/bin/zip -qry CYBERMAX-unsigned.ipa Payload
           test -s CYBERMAX-unsigned.ipa
-          /usr/bin/unzip -l CYBERMAX-unsigned.ipa | head -60
+          /usr/bin/unzip -t CYBERMAX-unsigned.ipa
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
@@ -75,11 +89,13 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Upload build log if failed
+      - name: Upload build logs if failed
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: CYBERMAX-build-log
-          path: source/xcodebuild.log
+          name: CYBERMAX-build-logs
+          path: |
+            source/simulator-build.log
+            source/xcodebuild.log
           if-no-files-found: ignore
           retention-days: 7
